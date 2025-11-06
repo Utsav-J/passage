@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_epub_viewer/flutter_epub_viewer.dart';
@@ -26,16 +27,49 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
   List<dynamic> _chapters = const [];
   List<dynamic> _searchResults = const [];
   String? _selectedCfi;
+  String? _selectedText;
   String _prefsKeyCfi = 'last_epub_cfi';
   String _prefsKeyFont = 'font_size';
   String _prefsKeyBookmarks = 'bookmarks_cfi';
-  String _prefsKeyHighlights = 'highlights_cfi';
+  String _prefsKeyHighlights = 'highlights_json';
   String? _openedSourceLabel;
+  
+  // Highlight colors
+  static const List<Color> _highlightColors = [
+    Colors.yellow,
+    Colors.green,
+    Colors.blue,
+    Colors.pink,
+    Colors.orange,
+    Colors.purple,
+  ];
 
   @override
   void initState() {
     super.initState();
-    _restoreSettings().then((_) => _openInitial());
+    // If assetPath is provided, initialize immediately
+    if (widget.assetPath != null) {
+      _initializeAsset();
+    }
+    // Restore settings and apply font size if asset is already loaded
+    _restoreSettings().then((_) {
+      if (_controller != null) {
+        _controller!.setFontSize(fontSize: _fontSize);
+      }
+      if (widget.assetPath == null) {
+        // Only open initial if no asset path (for file picker flow)
+        _openInitial();
+      }
+    });
+  }
+
+  void _initializeAsset() {
+    final controller = EpubController();
+    setState(() {
+      _openedSourceLabel = 'Asset';
+      _controller = controller;
+      _source = EpubSource.fromAsset(widget.assetPath!);
+    });
   }
 
   Future<void> _restoreSettings() async {
@@ -45,17 +79,28 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
     _bookmarks
       ..clear()
       ..addAll(savedBookmarks.map((e) => _Bookmark(label: 'Bookmark', cfi: e)));
-    final savedHighlights = prefs.getStringList(_prefsKeyHighlights) ?? <String>[];
-    _highlights
-      ..clear()
-      ..addAll(savedHighlights.map((e) => _Highlight(cfi: e)));
+    
+    // Restore highlights
+    final highlightsJson = prefs.getString(_prefsKeyHighlights);
+    _highlights.clear();
+    if (highlightsJson != null) {
+      try {
+        final List<dynamic> decoded = jsonDecode(highlightsJson);
+        _highlights.addAll(
+          decoded.map((e) => _Highlight.fromJson(e as Map<String, dynamic>)),
+        );
+      } catch (e) {
+        // Ignore invalid JSON
+      }
+    }
   }
 
   Future<void> _persistSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_prefsKeyFont, _fontSize);
     await prefs.setStringList(_prefsKeyBookmarks, _bookmarks.map((b) => b.cfi).toList());
-    await prefs.setStringList(_prefsKeyHighlights, _highlights.map((h) => h.cfi).toList());
+    final highlightsJson = jsonEncode(_highlights.map((h) => h.toJson()).toList());
+    await prefs.setString(_prefsKeyHighlights, highlightsJson);
   }
 
   Future<void> _openInitial() async {
@@ -247,27 +292,66 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
                       child: Text('Highlights', style: Theme.of(context).textTheme.titleLarge),
                     ),
                     Expanded(
-                      child: ListView.builder(
-                        itemCount: _highlights.length,
-                        itemBuilder: (context, index) {
-                          final h = _highlights[index];
-                          return ListTile(
-                            onTap: () => _controller?.display(cfi: h.cfi),
-                            dense: true,
-                            leading: const Icon(Icons.highlight_outlined),
-                            title: Text('Highlight ${index + 1}'),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              onPressed: () async {
-                                final cfi = h.cfi;
-                                setState(() => _highlights.removeAt(index));
-                                _persistSettings();
-                                await _controller?.removeHighlight(cfi: cfi);
+                      child: _highlights.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(16.w),
+                                child: Text(
+                                  'No highlights yet',
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                                      ),
+                                ),
+                              ),
+                            )
+                          : ListView.builder(
+                              itemCount: _highlights.length,
+                              itemBuilder: (context, index) {
+                                final h = _highlights[index];
+                                return ListTile(
+                                  onTap: () => _controller?.display(cfi: h.cfi),
+                                  dense: true,
+                                  leading: Container(
+                                    width: 32.w,
+                                    height: 32.h,
+                                    decoration: BoxDecoration(
+                                      color: h.color.withOpacity(0.3),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: h.color, width: 2),
+                                    ),
+                                    child: Icon(
+                                      Icons.highlight_outlined,
+                                      size: 18.sp,
+                                      color: h.color,
+                                    ),
+                                  ),
+                                  title: Text(
+                                    h.text.isNotEmpty
+                                        ? (h.text.length > 50 ? '${h.text.substring(0, 50)}...' : h.text)
+                                        : 'Highlight ${index + 1}',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context).textTheme.bodyMedium,
+                                  ),
+                                  subtitle: Text(
+                                    _getColorName(h.color),
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: h.color,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                  ),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.delete_outline),
+                                    onPressed: () async {
+                                      final cfi = h.cfi;
+                                      setState(() => _highlights.removeAt(index));
+                                      _persistSettings();
+                                      await _controller?.removeHighlight(cfi: cfi);
+                                    },
+                                  ),
+                                );
                               },
                             ),
-                          );
-                        },
-                      ),
                     ),
                   ],
                 ),
@@ -294,10 +378,24 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
                     controller.display(cfi: cfi);
                   }
                   // Re-apply saved highlights
-                  for (final h in _highlights) {
-                    await controller.addHighlight(cfi: h.cfi, color: Colors.yellow, opacity: 0.5);
+                  for (final highlight in _highlights) {
+                    await controller.addHighlight(
+                      cfi: highlight.cfi,
+                      color: highlight.color,
+                      opacity: 0.5,
+                    );
                   }
                 },
+                onTextSelected: (sel) {
+                  final s = sel as dynamic;
+                  final cfi = s?.selectionCfi as String?;
+                  final text = s?.selectedText as String?;
+                  setState(() {
+                    _selectedCfi = (cfi != null && cfi.isNotEmpty) ? cfi : null;
+                    _selectedText = text ?? '';
+                  });
+                },
+                selectionContextMenu: _buildHighlightContextMenu(),
                 onRelocated: (loc) {
                   final v = loc as dynamic;
                   final p = (v?.progress ?? 0.0).clamp(0.0, 1.0);
@@ -306,26 +404,37 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
                     _progressLabel = '${(p * 100).toStringAsFixed(0)}%';
                   });
                 },
-                onTextSelected: (sel) {
-                  final s = sel as dynamic;
-                  final cfi = s?.cfi as String?;
-                  setState(() => _selectedCfi = (cfi != null && cfi.isNotEmpty) ? cfi : null);
-                },
               ),
             ),
       bottomNavigationBar: (controller == null || _source == null)
           ? null
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildProgressBar(),
-                if (_selectedCfi != null) _buildSelectionBar(),
-              ],
-            ),
+          : _buildProgressBar(),
     );
   }
 
   Widget _buildEmptyState() {
+    // If assetPath is provided, show loading state instead of file picker
+    if (widget.assetPath != null) {
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.w),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              SizedBox(height: 16.h),
+              Text(
+                'Loading book...',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    
+    // Otherwise show file picker option
     return Center(
       child: Padding(
         padding: EdgeInsets.all(24.w),
@@ -377,46 +486,78 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
     );
   }
 
-  Widget _buildSelectionBar() {
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(16.w, 8.h, 16.w, 8.h),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text('Text selected', style: Theme.of(context).textTheme.bodyMedium),
-            ),
-            IconButton(
-              tooltip: 'Highlight',
-              icon: const Icon(Icons.highlight),
-              onPressed: () async {
-                final cfi = _selectedCfi;
-                if (cfi == null) return;
-                await _controller?.addHighlight(cfi: cfi, color: Colors.yellow, opacity: 0.5);
-                setState(() => _highlights.add(_Highlight(cfi: cfi)));
-                _persistSettings();
-              },
-            ),
-            IconButton(
-              tooltip: 'Underline',
-              icon: const Icon(Icons.format_underline),
-              onPressed: () async {
-                final cfi = _selectedCfi;
-                if (cfi == null) return;
-                await _controller?.addUnderline(cfi: cfi);
-              },
-            ),
-            IconButton(
-              tooltip: 'Clear',
-              icon: const Icon(Icons.close),
-              onPressed: () => setState(() => _selectedCfi = null),
-            ),
-          ],
+  ContextMenu _buildHighlightContextMenu() {
+    final menuItems = <ContextMenuItem>[];
+    
+    // Add highlight color options
+    // Start from 1 to avoid conflicts with system menu items (0 is typically reserved)
+    for (int i = 0; i < _highlightColors.length; i++) {
+      final color = _highlightColors[i];
+      menuItems.add(
+        ContextMenuItem(
+          id: i + 1, // Use integer ID starting from 1
+          title: 'Highlight (${_getColorName(color)})',
+          action: () => _applyHighlight(color),
         ),
+      );
+    }
+    
+    return ContextMenu(
+      settings: ContextMenuSettings(
+        hideDefaultSystemContextMenuItems: false,
       ),
+      menuItems: menuItems,
     );
   }
+
+  Future<void> _applyHighlight(Color color) async {
+    final cfi = _selectedCfi;
+    final text = _selectedText ?? '';
+    
+    if (cfi == null || cfi.isEmpty) return;
+    
+    await _controller?.addHighlight(cfi: cfi, color: color, opacity: 0.5);
+    
+    setState(() {
+      _highlights.add(_Highlight(
+        cfi: cfi,
+        color: color,
+        text: text,
+      ));
+      _selectedCfi = null;
+      _selectedText = null;
+    });
+    
+    _persistSettings();
+    
+    // Show feedback
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white, size: 20.sp),
+              SizedBox(width: 8.w),
+              Text('Text highlighted in ${_getColorName(color)}'),
+            ],
+          ),
+          duration: const Duration(seconds: 1),
+          backgroundColor: color,
+        ),
+      );
+    }
+  }
+
+  String _getColorName(Color color) {
+    if (color == Colors.yellow) return 'Yellow';
+    if (color == Colors.green) return 'Green';
+    if (color == Colors.blue) return 'Blue';
+    if (color == Colors.pink) return 'Pink';
+    if (color == Colors.orange) return 'Orange';
+    if (color == Colors.purple) return 'Purple';
+    return 'Custom';
+  }
+
 
   void _openControls() {
     showModalBottomSheet(
@@ -529,7 +670,30 @@ class _Bookmark {
 }
 
 class _Highlight {
-  _Highlight({required this.cfi});
+  _Highlight({
+    required this.cfi,
+    required this.color,
+    required this.text,
+  });
+
   final String cfi;
+  final Color color;
+  final String text;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'cfi': cfi,
+      'color': color.value,
+      'text': text,
+    };
+  }
+
+  factory _Highlight.fromJson(Map<String, dynamic> json) {
+    return _Highlight(
+      cfi: json['cfi'] as String,
+      color: Color(json['color'] as int? ?? Colors.yellow.value),
+      text: json['text'] as String? ?? '',
+    );
+  }
 }
 
