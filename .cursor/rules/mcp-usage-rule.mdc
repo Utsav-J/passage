@@ -1,5 +1,0 @@
----
-alwaysApply: false
----
-- Use the flutter-mcp MCP server provided for any new widget or feature implementation
-- Browse the flutter documentation via the tools provided by the flutter-mcp MCP server and implement the changes

@@ -11,7 +11,6 @@ import 'services/epub_settings_service.dart';
 import 'utils/color_utils.dart';
 import 'utils/epub_theme_resolver.dart';
 import 'widgets/empty_state.dart';
-import 'widgets/progress_bar.dart';
 import 'widgets/reader_controls.dart';
 import 'widgets/reader_drawer.dart';
 import 'widgets/highlight_context_menu.dart';
@@ -31,13 +30,17 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
   double _fontSize = 16.0;
   final List<Bookmark> _bookmarks = [];
   final List<Highlight> _highlights = [];
-  String _progressLabel = '0%';
-  double _progress = 0.0;
+  double _maxProgress = 0.0;
   List<dynamic> _chapters = const [];
   List<dynamic> _searchResults = const [];
   String? _selectedCfi;
   String? _selectedText;
   String? _openedSourceLabel;
+  String? _currentCfi;
+  int? _currentPage;
+
+  // Generate book ID from asset path
+  String get _bookId => widget.assetPath ?? 'unknown';
 
   @override
   void initState() {
@@ -68,18 +71,21 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
   }
 
   Future<void> _restoreSettings() async {
-    final settings = await EpubSettingsService.restoreSettings();
+    final settings = await EpubSettingsService.restoreSettings(_bookId);
+    final maxProgress = await EpubSettingsService.getMaxProgress(_bookId);
     setState(() {
       _fontSize = settings['fontSize'] as double;
       _bookmarks.clear();
       _bookmarks.addAll(settings['bookmarks'] as List<Bookmark>);
       _highlights.clear();
       _highlights.addAll(settings['highlights'] as List<Highlight>);
+      _maxProgress = maxProgress;
     });
   }
 
   Future<void> _persistSettings() async {
     await EpubSettingsService.persistSettings(
+      bookId: _bookId,
       fontSize: _fontSize,
       bookmarks: _bookmarks,
       highlights: _highlights,
@@ -135,7 +141,8 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
       final dyn = loc as dynamic;
       cfi = (dyn?.startCfi ?? dyn?.cfi ?? '') as String;
     }
-    await EpubSettingsService.savePosition(cfi);
+    await EpubSettingsService.savePosition(_bookId, cfi);
+    await EpubSettingsService.saveMaxProgress(_bookId, _maxProgress);
   }
 
   Future<void> _addBookmark() async {
@@ -145,12 +152,49 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
     final dyn = loc as dynamic;
     final cfi = (dyn?.startCfi ?? dyn?.cfi ?? '') as String;
     if (cfi.isEmpty) return;
+
+    // Check if this page is already bookmarked
+    final existingIndex = _bookmarks.indexWhere((b) => b.cfi == cfi);
+    if (existingIndex != -1) {
+      // Remove the bookmark if it already exists
+      setState(() {
+        _bookmarks.removeAt(existingIndex);
+      });
+      _persistSettings();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Bookmark removed'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Add new bookmark with page number
+    final pageNumber = _currentPage;
+    final label = pageNumber != null
+        ? 'Page $pageNumber'
+        : 'Bookmark ${_bookmarks.length + 1}';
     setState(() {
-      _bookmarks.add(
-        Bookmark(label: 'Bookmark ${_bookmarks.length + 1}', cfi: cfi),
-      );
+      _bookmarks.add(Bookmark(label: label, cfi: cfi, pageNumber: pageNumber));
     });
     _persistSettings();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Bookmark added: $label'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
+  bool _isCurrentPageBookmarked() {
+    if (_currentCfi == null || _currentCfi!.isEmpty) return false;
+    return _bookmarks.any((b) => b.cfi == _currentCfi);
   }
 
   void _goToBookmark(Bookmark b) {
@@ -179,120 +223,205 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final controller = _controller;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _openedSourceLabel == null
-              ? 'EPUB Reader'
-              : 'EPUB Reader • ${_openedSourceLabel!}',
+  Future<bool> _onWillPop() async {
+    // Save current position before showing dialog
+    await _savePosition();
+
+    // Show confirmation dialog
+    final shouldPop = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Close Book?'),
+        content: const Text(
+          'Your reading progress has been saved. Do you want to close this book?',
         ),
         actions: [
-          IconButton(
-            onPressed: _openControls,
-            icon: const Icon(Icons.tune),
-            tooltip: 'Reader controls',
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Stay'),
           ),
-          IconButton(
-            onPressed: _decreaseFont,
-            icon: const Icon(Icons.text_decrease),
-            tooltip: 'Smaller',
-          ),
-          IconButton(
-            onPressed: _increaseFont,
-            icon: const Icon(Icons.text_increase),
-            tooltip: 'Larger',
-          ),
-          IconButton(
-            onPressed: _addBookmark,
-            icon: const Icon(Icons.bookmark_add_outlined),
-            tooltip: 'Bookmark',
-          ),
-          IconButton(
-            onPressed: _pickEpub,
-            icon: const Icon(Icons.folder_open),
-            tooltip: 'Open EPUB',
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Close'),
           ),
         ],
       ),
-      drawer: controller == null
-          ? null
-          : ReaderDrawer(
-              chapters: _chapters,
-              bookmarks: _bookmarks,
-              highlights: _highlights,
-              controller: controller,
-              onChapterTap: (cfi) => _controller?.display(cfi: cfi),
-              onBookmarkTap: _goToBookmark,
-              onBookmarkDelete: (index) {
-                setState(() => _bookmarks.removeAt(index));
-                _persistSettings();
-              },
-              onHighlightTap: (cfi) => _controller?.display(cfi: cfi),
-              onHighlightDelete: (index, cfi) async {
-                setState(() => _highlights.removeAt(index));
-                _persistSettings();
-                await _controller?.removeHighlight(cfi: cfi);
-              },
+    );
+
+    return shouldPop ?? false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+
+        final shouldPop = await _onWillPop();
+        if (shouldPop && context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(
+            _openedSourceLabel == null
+                ? 'EPUB Reader'
+                : 'EPUB Reader • ${_openedSourceLabel!}',
+          ),
+          actions: [
+            IconButton(
+              onPressed: _openControls,
+              icon: const Icon(Icons.tune),
+              tooltip: 'Reader controls',
             ),
-      body: (controller == null || _source == null)
-          ? EmptyState(
-              isLoading: widget.assetPath != null,
-              onPickFile: _pickEpub,
-            )
-          : SafeArea(
-              child: EpubViewer(
-                epubSource: _source!,
-                epubController: controller,
-                displaySettings: EpubDisplaySettings(
-                  flow: EpubFlow.paginated,
-                  snap: true,
-                  theme: EpubThemeResolver.resolve(context),
-                ),
-                onChaptersLoaded: (chapters) async {
-                  setState(() => _chapters = chapters);
-                },
-                onEpubLoaded: () async {
-                  final cfi = await EpubSettingsService.getLastPosition();
-                  if (cfi != null && cfi.isNotEmpty) {
-                    controller.display(cfi: cfi);
+            IconButton(
+              onPressed: _decreaseFont,
+              icon: const Icon(Icons.text_decrease),
+              tooltip: 'Smaller',
+            ),
+            IconButton(
+              onPressed: _increaseFont,
+              icon: const Icon(Icons.text_increase),
+              tooltip: 'Larger',
+            ),
+            IconButton(
+              onPressed: _addBookmark,
+              icon: Icon(
+                _isCurrentPageBookmarked()
+                    ? Icons.bookmark
+                    : Icons.bookmark_add_outlined,
+              ),
+              tooltip: _isCurrentPageBookmarked()
+                  ? 'Remove bookmark'
+                  : 'Add bookmark',
+            ),
+            IconButton(
+              onPressed: _pickEpub,
+              icon: const Icon(Icons.folder_open),
+              tooltip: 'Open EPUB',
+            ),
+          ],
+        ),
+        drawer: controller == null
+            ? null
+            : ReaderDrawer(
+                chapters: _chapters,
+                bookmarks: _bookmarks,
+                highlights: _highlights,
+                controller: controller,
+                progress: _maxProgress,
+                progressLabel: '${(_maxProgress * 100).toStringAsFixed(0)}%',
+                onChapterTap: (href) {
+                  // Navigate using href - the display method can handle both cfi and href
+                  if (href.isNotEmpty) {
+                    try {
+                      // The flutter_epub_viewer display method accepts href as cfi parameter
+                      _controller?.display(cfi: href);
+                    } catch (e) {
+                      debugPrint('Failed to navigate to chapter: $e');
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Failed to navigate to chapter'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      }
+                    }
                   }
-                  // Re-apply saved highlights
-                  for (final highlight in _highlights) {
-                    await controller.addHighlight(
-                      cfi: highlight.cfi,
-                      color: highlight.color,
-                      opacity: 0.5,
-                    );
-                  }
                 },
-                onTextSelected: (sel) {
-                  final s = sel as dynamic;
-                  final cfi = s?.selectionCfi as String?;
-                  final text = s?.selectedText as String?;
-                  setState(() {
-                    _selectedCfi = (cfi != null && cfi.isNotEmpty) ? cfi : null;
-                    _selectedText = text ?? '';
-                  });
+                onBookmarkTap: _goToBookmark,
+                onBookmarkDelete: (index) {
+                  setState(() => _bookmarks.removeAt(index));
+                  _persistSettings();
                 },
-                selectionContextMenu: HighlightContextMenu.build(
-                  onHighlight: _applyHighlight,
-                ),
-                onRelocated: (loc) {
-                  final v = loc as dynamic;
-                  final p = (v?.progress ?? 0.0).clamp(0.0, 1.0);
-                  setState(() {
-                    _progress = p;
-                    _progressLabel = '${(p * 100).toStringAsFixed(0)}%';
-                  });
+                onHighlightTap: (cfi) => _controller?.display(cfi: cfi),
+                onHighlightDelete: (index, cfi) async {
+                  setState(() => _highlights.removeAt(index));
+                  _persistSettings();
+                  await _controller?.removeHighlight(cfi: cfi);
                 },
               ),
-            ),
-      bottomNavigationBar: (controller == null || _source == null)
-          ? null
-          : ProgressBar(progress: _progress, label: _progressLabel),
+        body: (controller == null || _source == null)
+            ? EmptyState(
+                isLoading: widget.assetPath != null,
+                onPickFile: _pickEpub,
+              )
+            : SafeArea(
+                child: EpubViewer(
+                  epubSource: _source!,
+                  epubController: controller,
+                  displaySettings: EpubDisplaySettings(
+                    flow: EpubFlow.paginated,
+                    snap: true,
+                    theme: EpubThemeResolver.resolve(context),
+                  ),
+                  onChaptersLoaded: (chapters) async {
+                    setState(() => _chapters = chapters);
+                  },
+                  onEpubLoaded: () async {
+                    final cfi = await EpubSettingsService.getLastPosition(
+                      _bookId,
+                    );
+                    if (cfi != null && cfi.isNotEmpty) {
+                      controller.display(cfi: cfi);
+                    }
+                    // Re-apply saved highlights
+                    for (final highlight in _highlights) {
+                      await controller.addHighlight(
+                        cfi: highlight.cfi,
+                        color: highlight.color,
+                        opacity: 0.5,
+                      );
+                    }
+                  },
+                  onTextSelected: (sel) {
+                    final s = sel as dynamic;
+                    final cfi = s?.selectionCfi as String?;
+                    final text = s?.selectedText as String?;
+                    setState(() {
+                      _selectedCfi = (cfi != null && cfi.isNotEmpty)
+                          ? cfi
+                          : null;
+                      _selectedText = text ?? '';
+                    });
+                  },
+                  selectionContextMenu: HighlightContextMenu.build(
+                    onHighlight: _applyHighlight,
+                  ),
+                  onRelocated: (loc) {
+                    final v = loc as dynamic;
+                    final p = (v?.progress ?? 0.0).clamp(0.0, 1.0);
+                    final cfi = (v?.startCfi ?? v?.cfi ?? '') as String;
+
+                    // Try to extract page number from location
+                    int? pageNum;
+                    try {
+                      final displayed = v?.displayed as dynamic;
+                      final page = displayed?.page;
+                      if (page != null) {
+                        pageNum = page as int;
+                      }
+                    } catch (e) {
+                      // Page number not available
+                    }
+
+                    setState(() {
+                      _currentCfi = cfi;
+                      _currentPage = pageNum;
+
+                      // Update max progress
+                      if (p > _maxProgress) {
+                        _maxProgress = p;
+                      }
+                    });
+                  },
+                ),
+              ),
+      ),
     );
   }
 

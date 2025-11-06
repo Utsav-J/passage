@@ -17,6 +17,7 @@ dependencies:
   flutter_screenutil: ^5.9.3
   shared_preferences: ^2.3.2
   file_picker: ^8.1.2
+  epubx: ^4.0.0
 
 dev_dependencies:
   flutter_test:

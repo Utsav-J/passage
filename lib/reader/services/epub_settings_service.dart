@@ -4,22 +4,30 @@ import '../models/bookmark.dart';
 import '../models/highlight.dart';
 
 class EpubSettingsService {
-  static const String _keyCfi = 'last_epub_cfi';
   static const String _keyFont = 'font_size';
-  static const String _keyBookmarks = 'bookmarks_cfi';
-  static const String _keyHighlights = 'highlights_json';
 
-  // Restore settings
-  static Future<Map<String, dynamic>> restoreSettings() async {
+  // Generate book-specific keys
+  static String _bookKey(String bookId, String suffix) => 'book_${bookId}_$suffix';
+
+  // Restore settings for a specific book
+  static Future<Map<String, dynamic>> restoreSettings(String bookId) async {
     final prefs = await SharedPreferences.getInstance();
     final fontSize = prefs.getDouble(_keyFont) ?? 16.0;
 
-    final savedBookmarks = prefs.getStringList(_keyBookmarks) ?? <String>[];
-    final bookmarks = savedBookmarks
-        .map((e) => Bookmark(label: 'Bookmark', cfi: e))
-        .toList();
+    final bookmarksJson = prefs.getString(_bookKey(bookId, 'bookmarks'));
+    final bookmarks = <Bookmark>[];
+    if (bookmarksJson != null) {
+      try {
+        final List<dynamic> decoded = jsonDecode(bookmarksJson);
+        bookmarks.addAll(
+          decoded.map((e) => Bookmark.fromJson(e as Map<String, dynamic>)),
+        );
+      } catch (e) {
+        // Ignore invalid JSON
+      }
+    }
 
-    final highlightsJson = prefs.getString(_keyHighlights);
+    final highlightsJson = prefs.getString(_bookKey(bookId, 'highlights'));
     final highlights = <Highlight>[];
     if (highlightsJson != null) {
       try {
@@ -39,33 +47,51 @@ class EpubSettingsService {
     };
   }
 
-  // Persist settings
+  // Persist settings for a specific book
   static Future<void> persistSettings({
+    required String bookId,
     required double fontSize,
     required List<Bookmark> bookmarks,
     required List<Highlight> highlights,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_keyFont, fontSize);
-    await prefs.setStringList(
-      _keyBookmarks,
-      bookmarks.map((b) => b.cfi).toList(),
+
+    final bookmarksJson = jsonEncode(
+      bookmarks.map((b) => b.toJson()).toList(),
     );
+    await prefs.setString(_bookKey(bookId, 'bookmarks'), bookmarksJson);
+
     final highlightsJson = jsonEncode(
       highlights.map((h) => h.toJson()).toList(),
     );
-    await prefs.setString(_keyHighlights, highlightsJson);
+    await prefs.setString(_bookKey(bookId, 'highlights'), highlightsJson);
   }
 
-  // Save current position
-  static Future<void> savePosition(String cfi) async {
+  // Save current position for a specific book
+  static Future<void> savePosition(String bookId, String cfi) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyCfi, cfi);
+    await prefs.setString(_bookKey(bookId, 'last_cfi'), cfi);
   }
 
-  // Get last saved position
-  static Future<String?> getLastPosition() async {
+  // Get last saved position for a specific book
+  static Future<String?> getLastPosition(String bookId) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_keyCfi);
+    return prefs.getString(_bookKey(bookId, 'last_cfi'));
+  }
+
+  // Save max progress for a specific book
+  static Future<void> saveMaxProgress(String bookId, double progress) async {
+    final prefs = await SharedPreferences.getInstance();
+    final currentMax = prefs.getDouble(_bookKey(bookId, 'max_progress')) ?? 0.0;
+    if (progress > currentMax) {
+      await prefs.setDouble(_bookKey(bookId, 'max_progress'), progress);
+    }
+  }
+
+  // Get max progress for a specific book
+  static Future<double> getMaxProgress(String bookId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getDouble(_bookKey(bookId, 'max_progress')) ?? 0.0;
   }
 }

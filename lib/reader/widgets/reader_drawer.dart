@@ -12,6 +12,8 @@ class ReaderDrawer extends StatelessWidget {
     required this.bookmarks,
     required this.highlights,
     required this.controller,
+    required this.progress,
+    required this.progressLabel,
     required this.onChapterTap,
     required this.onBookmarkTap,
     required this.onBookmarkDelete,
@@ -23,6 +25,8 @@ class ReaderDrawer extends StatelessWidget {
   final List<Bookmark> bookmarks;
   final List<Highlight> highlights;
   final EpubController? controller;
+  final double progress;
+  final String progressLabel;
   final void Function(String cfi) onChapterTap;
   final void Function(Bookmark) onBookmarkTap;
   final void Function(int index) onBookmarkDelete;
@@ -36,6 +40,54 @@ class ReaderDrawer extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Progress indicator at the top
+            Container(
+              padding: EdgeInsets.all(16.w),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+                border: Border(
+                  bottom: BorderSide(
+                    color: Theme.of(context).dividerColor,
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Reading Progress',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      Text(
+                        progressLabel,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: 12.h),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8.r),
+                    child: LinearProgressIndicator(
+                      value: progress,
+                      minHeight: 8.h,
+                      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             // Table of Contents
             Padding(
               padding: EdgeInsets.all(16.w),
@@ -59,9 +111,12 @@ class ReaderDrawer extends StatelessWidget {
                     ),
                     onTap: () {
                       final dyn = chapter as dynamic;
-                      final cfi = dyn.cfi as String?;
-                      if (cfi != null && cfi.isNotEmpty) {
-                        onChapterTap(cfi);
+                      // EpubChapter has href property, not cfi
+                      // We need to pass href to the navigation callback
+                      final href = dyn.href as String?;
+                      
+                      if (href != null && href.isNotEmpty) {
+                        onChapterTap(href);
                       }
                     },
                   );
