@@ -1,0 +1,29 @@
+name: passage
+description: "Pass the message"
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # flutter_epub_viewer: ^1.2.3
+  flutter_epub_viewer:
+      git:
+        url: https://github.com/Utsav-J/flutter_epub_viewer.git
+        ref: v1.2.3-nozoom
+  flutter_screenutil: ^5.9.3
+  shared_preferences: ^2.3.2
+  file_picker: ^8.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/books/
