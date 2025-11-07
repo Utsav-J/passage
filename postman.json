@@ -1,0 +1,602 @@
+{
+	"info": {
+		"_postman_id": "bookmate-api-collection",
+		"name": "BookMate API",
+		"description": "Backend API for BookMate - A social e-book reading platform",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Root",
+			"item": [
+				{
+					"name": "Root Endpoint",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Root endpoint that returns API information"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Register",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									""
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"johndoe\",\n    \"email\": \"john@example.com\",\n    \"password\": \"securepassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"register"
+							]
+						},
+						"description": "Register a new user"
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    // Save token to collection variables",
+									"    pm.collectionVariables.set(\"access_token\", jsonData.access_token);",
+									"    // Also save to environment if one is active",
+									"    if (pm.environment.name) {",
+									"        pm.environment.set(\"access_token\", jsonData.access_token);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-www-form-urlencoded"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "username",
+									"value": "john@example.com",
+									"type": "text",
+									"description": "Use email as username"
+								},
+								{
+									"key": "password",
+									"value": "securepassword123",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						},
+						"description": "Login and get access token. The token will be automatically saved to the environment variable 'access_token'."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current User",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/auth/me",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"auth",
+								"me"
+							]
+						},
+						"description": "Get current user profile (requires authentication)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Users",
+			"item": [
+				{
+					"name": "Search Users",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/users/search?query=johndoe",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"users",
+								"search"
+							],
+							"query": [
+								{
+									"key": "query",
+									"value": "johndoe",
+									"description": "Search query (username or email)"
+								}
+							]
+						},
+						"description": "Search users by username or email (requires authentication)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Books",
+			"item": [
+				{
+					"name": "Get My Books",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/books/my",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"books",
+								"my"
+							]
+						},
+						"description": "Get all books for the current user (requires authentication)"
+					},
+					"response": []
+				},
+				{
+					"name": "Add Book",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"The Great Gatsby\",\n    \"author\": \"F. Scott Fitzgerald\",\n    \"cover_image_url\": \"https://example.com/cover.jpg\",\n    \"file_path\": \"/path/to/book.epub\",\n    \"progress\": 0.0\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/books/add",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"books",
+								"add"
+							]
+						},
+						"description": "Add a new book (requires authentication)"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Book",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/books/1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"books",
+								"1"
+							],
+							"variable": [
+								{
+									"key": "book_id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Delete a book by ID (requires authentication)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Mates",
+			"item": [
+				{
+					"name": "Get Mates",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mates",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mates"
+							]
+						},
+						"description": "Get all accepted mates for the current user (requires authentication)"
+					},
+					"response": []
+				},
+				{
+					"name": "Add Mate",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mates/add/janedoe",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mates",
+								"add",
+								"janedoe"
+							],
+							"variable": [
+								{
+									"key": "username",
+									"value": "janedoe"
+								}
+							]
+						},
+						"description": "Send a mate request to another user by username (requires authentication)"
+					},
+					"response": []
+				},
+				{
+					"name": "Accept Mate",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mates/accept/janedoe",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mates",
+								"accept",
+								"janedoe"
+							],
+							"variable": [
+								{
+									"key": "username",
+									"value": "janedoe"
+								}
+							]
+						},
+						"description": "Accept a mate request from another user by username (requires authentication)"
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Mate",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/mates/remove/janedoe",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"mates",
+								"remove",
+								"janedoe"
+							],
+							"variable": [
+								{
+									"key": "username",
+									"value": "janedoe"
+								}
+							]
+						},
+						"description": "Remove a mate by username (requires authentication)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Snippets",
+			"item": [
+				{
+					"name": "Send Snippet",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"mate_id\": 2,\n    \"book_id\": 1,\n    \"text\": \"This is a great passage from the book!\",\n    \"note\": \"Thought you might like this\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/snippets/send",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"snippets",
+								"send"
+							]
+						},
+						"description": "Send a snippet to a mate (requires authentication). The mate must be an accepted mate and the book must belong to the sender."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Received Snippets",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/snippets/received",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"snippets",
+								"received"
+							]
+						},
+						"description": "Get all snippets received by the current user (requires authentication)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Sent Snippets",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/snippets/sent",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"snippets",
+								"sent"
+							]
+						},
+						"description": "Get all snippets sent by the current user (requires authentication)"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Snippet",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{access_token}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/snippets/1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"snippets",
+								"1"
+							],
+							"variable": [
+								{
+									"key": "snippet_id",
+									"value": "1"
+								}
+							]
+						},
+						"description": "Delete a snippet by ID (requires authentication). You can only delete snippets you sent or received."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "access_token",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

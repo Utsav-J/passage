@@ -1,13 +1,20 @@
-import 'dart:typed_data';
-
-import 'package:epubx/epubx.dart';
-import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:image/image.dart' as img;
+import 'package:passage/my_mates_tab.dart';
 import 'package:passage/reader/epub_reader_page.dart';
+import 'package:passage/section_header.dart';
 import 'package:passage/theme/app_theme.dart';
+import 'package:passage/models/book.dart';
+import 'package:passage/models/user.dart';
+import 'package:passage/models/mate.dart';
+import 'package:passage/services/book_service.dart';
+import 'package:passage/services/auth_service.dart';
+import 'package:passage/services/snippet_service.dart';
+import 'package:passage/services/user_service.dart';
+import 'package:passage/services/mate_service.dart';
+import 'package:passage/auth/login_screen.dart';
+import 'profile/profile_screen.dart';
 
 const String _defaultAssetPath = 'assets/books/sample.epub';
 
@@ -27,66 +34,46 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
-  _BookData? _assetBook;
-
-  List<_BookData> get _libraryBooks => [
-    _assetBook ?? _placeholderAssetBook,
-    ..._additionalLibraryBooks,
-  ];
+  final BookService _bookService = BookService();
+  final AuthService _authService = AuthService();
+  List<Book> _books = [];
+  bool _isLoadingBooks = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _loadDefaultAssetBook();
+    _loadBooks();
   }
 
-  Future<void> _loadDefaultAssetBook() async {
+  Future<void> _loadBooks() async {
+    setState(() {
+      _isLoadingBooks = true;
+      _errorMessage = null;
+    });
+
     try {
-      final data = await rootBundle.load(_defaultAssetPath);
-      final bytes = data.buffer.asUint8List();
-      final book = await EpubReader.readBook(bytes);
-
-      final rawTitle = book.Title?.trim();
-      final title = (rawTitle == null || rawTitle.isEmpty)
-          ? 'Sample EPUB'
-          : rawTitle;
-
-      final authorCandidates = (book.AuthorList ?? [])
-          .map((e) => e!.trim())
-          .where((e) => e.isNotEmpty)
-          .toList();
-      final author = authorCandidates.isNotEmpty
-          ? authorCandidates.join(', ')
-          : (book.Author?.trim().isNotEmpty == true
-                ? book.Author!.trim()
-                : 'Unknown Author');
-
-      final coverImage = book.CoverImage;
-      Uint8List? coverBytes;
-      if (coverImage != null) {
-        try {
-          // Encode the Image to PNG bytes using the image package
-          final pngBytes = img.encodePng(coverImage);
-          coverBytes = Uint8List.fromList(pngBytes);
-        } catch (e) {
-          debugPrint('Failed to encode cover image: $e');
-        }
-      }
-
+      final books = await _bookService.getMyBooks();
       if (!mounted) return;
       setState(() {
-        _assetBook = _BookData(
-          title: title,
-          subtitle: author,
-          progress: 0.0,
-          color: const Color(0xFF7B61FF),
-          assetPath: _defaultAssetPath,
-          coverImage: coverBytes,
-        );
+        _books = books;
+        _isLoadingBooks = false;
       });
-    } catch (error) {
-      debugPrint('Failed to load default asset metadata: $error');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+        _isLoadingBooks = false;
+      });
     }
+  }
+
+  Future<void> _handleLogout() async {
+    await _authService.logout();
+    if (!mounted) return;
+    Navigator.of(
+      context,
+    ).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
   }
 
   @override
@@ -96,8 +83,15 @@ class _HomeScreenState extends State<HomeScreen> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          _MyBooksTab(onOpenBook: _openBook, books: _libraryBooks),
-          const _MyMatesTab(),
+          _MyBooksTab(
+            onOpenBook: _openBook,
+            books: _books,
+            isLoading: _isLoadingBooks,
+            onDeleteBook: _deleteBook,
+            errorMessage: _errorMessage,
+            onRefresh: _loadBooks,
+          ),
+          MyMatesTab(),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
@@ -136,7 +130,17 @@ class _HomeScreenState extends State<HomeScreen> {
             IconButton(
               tooltip: 'Add book',
               icon: const Icon(Icons.add_rounded),
-              onPressed: () => _showFeatureComingSoon('Add book'),
+              onPressed: _showAddBookDialog,
+            ),
+            IconButton(
+              tooltip: 'Profile',
+              icon: const Icon(Icons.account_circle_outlined),
+              onPressed: _openProfile,
+            ),
+            IconButton(
+              tooltip: 'Logout',
+              icon: const Icon(Icons.logout),
+              onPressed: _handleLogout,
             ),
             _buildThemeMenu(),
           ],
@@ -151,9 +155,14 @@ class _HomeScreenState extends State<HomeScreen> {
           centerTitle: false,
           actions: [
             IconButton(
-              tooltip: 'Filter feed',
-              icon: const Icon(Icons.filter_list_rounded),
-              onPressed: () => _showFeatureComingSoon('Feed filters'),
+              tooltip: 'Add mate',
+              icon: const Icon(Icons.person_add),
+              onPressed: _showAddMateDialog,
+            ),
+            IconButton(
+              tooltip: 'Profile',
+              icon: const Icon(Icons.account_circle_outlined),
+              onPressed: _openProfile,
             ),
             _buildThemeMenu(),
           ],
@@ -165,13 +174,13 @@ class _HomeScreenState extends State<HomeScreen> {
     switch (_currentIndex) {
       case 0:
         return FloatingActionButton(
-          onPressed: () => _showFeatureComingSoon('Add new book'),
+          onPressed: _showAddBookDialog,
           child: const Icon(Icons.add),
         );
       case 1:
       default:
         return FloatingActionButton(
-          onPressed: () => _showFeatureComingSoon('Share a snippet'),
+          onPressed: _showShareSnippetDialog,
           child: const Icon(Icons.send),
         );
     }
@@ -203,128 +212,471 @@ class _HomeScreenState extends State<HomeScreen> {
       );
   }
 
-  void _openBook(_BookData book) {
+  void _openProfile() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+  }
+
+  void _openBook(Book book) {
+    // For demo books (id < 0), use the asset path directly
+    // For regular books, use the default asset path since books don't store EPUB files
+    // In a real app, you'd need to handle EPUB file storage/retrieval
+    final assetPath = book.id < 0 ? _defaultAssetPath : _defaultAssetPath;
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) =>
-            EpubReaderPage(assetPath: book.assetPath ?? _defaultAssetPath),
+      MaterialPageRoute(builder: (_) => EpubReaderPage(assetPath: assetPath)),
+    );
+  }
+
+  Future<void> _showAddBookDialog() async {
+    final titleController = TextEditingController();
+    final authorController = TextEditingController();
+    final coverUrlController = TextEditingController();
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Book'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: titleController,
+                decoration: const InputDecoration(
+                  labelText: 'Title',
+                  hintText: 'Enter book title',
+                ),
+                textCapitalization: TextCapitalization.words,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: authorController,
+                decoration: const InputDecoration(
+                  labelText: 'Author',
+                  hintText: 'Enter author name',
+                ),
+                textCapitalization: TextCapitalization.words,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: coverUrlController,
+                decoration: const InputDecoration(
+                  labelText: 'Cover Image URL (Optional)',
+                  hintText: 'Enter cover image URL',
+                ),
+                keyboardType: TextInputType.url,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (titleController.text.trim().isNotEmpty &&
+                  authorController.text.trim().isNotEmpty) {
+                Navigator.of(context).pop(true);
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
       ),
     );
+
+    if (result == true) {
+      try {
+        await _bookService.addBook(
+          title: titleController.text.trim(),
+          author: authorController.text.trim(),
+          coverImageUrl: coverUrlController.text.trim().isEmpty
+              ? null
+              : coverUrlController.text.trim(),
+        );
+        if (!mounted) return;
+        _loadBooks();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Book added successfully')),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+
+    titleController.dispose();
+    authorController.dispose();
+    coverUrlController.dispose();
+  }
+
+  Future<void> _deleteBook(int bookId) async {
+    try {
+      await _bookService.deleteBook(bookId);
+      if (!mounted) return;
+      _loadBooks();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Book deleted successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _showAddMateDialog() async {
+    await showDialog(
+      context: context,
+      builder: (context) => const _AddMateDialog(),
+    );
+  }
+
+  Future<void> _showShareSnippetDialog() async {
+    final mateService = MateService();
+    final snippetService = SnippetService();
+    final bookService = BookService();
+    List<Mate> mates;
+    List<Book> books;
+
+    try {
+      mates = await mateService.getMates();
+      books = await bookService.getMyBooks();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+
+    if (mates.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You need to have mates first')),
+      );
+      return;
+    }
+
+    if (books.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You need to have books first')),
+      );
+      return;
+    }
+
+    final textController = TextEditingController();
+    final noteController = TextEditingController();
+    Mate? selectedMate;
+    Book? selectedBook;
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Share Snippet'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<Mate>(
+                  value: selectedMate,
+                  decoration: const InputDecoration(labelText: 'Select Mate'),
+                  items: mates.map((mate) {
+                    return DropdownMenuItem(
+                      value: mate,
+                      child: Text(mate.mate?.username ?? 'Unknown'),
+                    );
+                  }).toList(),
+                  onChanged: (value) => setState(() => selectedMate = value),
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<Book>(
+                  value: selectedBook,
+                  decoration: const InputDecoration(labelText: 'Select Book'),
+                  items: books.map((book) {
+                    return DropdownMenuItem(
+                      value: book,
+                      child: Text(book.title),
+                    );
+                  }).toList(),
+                  onChanged: (value) => setState(() => selectedBook = value),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: textController,
+                  decoration: const InputDecoration(
+                    labelText: 'Snippet Text',
+                    hintText: 'Enter the text you want to share',
+                  ),
+                  maxLines: 4,
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: noteController,
+                  decoration: const InputDecoration(
+                    labelText: 'Note (Optional)',
+                    hintText: 'Add a note',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (selectedMate != null &&
+                    selectedBook != null &&
+                    textController.text.trim().isNotEmpty) {
+                  Navigator.of(context).pop(true);
+                }
+              },
+              child: const Text('Send'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == true &&
+        selectedMate != null &&
+        selectedBook != null &&
+        textController.text.trim().isNotEmpty) {
+      try {
+        await snippetService.sendSnippet(
+          mateId: selectedMate!.mateId,
+          bookId: selectedBook!.id,
+          text: textController.text.trim(),
+          note: noteController.text.trim().isEmpty
+              ? null
+              : noteController.text.trim(),
+        );
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Snippet sent successfully')),
+        );
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+
+    textController.dispose();
+    noteController.dispose();
   }
 }
 
 class _MyBooksTab extends StatelessWidget {
-  const _MyBooksTab({required this.onOpenBook, required this.books});
+  const _MyBooksTab({
+    required this.onOpenBook,
+    required this.books,
+    required this.isLoading,
+    required this.onDeleteBook,
+    this.errorMessage,
+    this.onRefresh,
+  });
 
-  final ValueChanged<_BookData> onOpenBook;
-  final List<_BookData> books;
+  final ValueChanged<Book> onOpenBook;
+  final List<Book> books;
+  final bool isLoading;
+  final ValueChanged<int> onDeleteBook;
+  final String? errorMessage;
+  final VoidCallback? onRefresh;
 
-  @override
-  Widget build(BuildContext context) {
-    final crossAxisCount = ScreenUtil().screenWidth > 540 ? 3 : 2;
-
-    return CustomScrollView(
-      slivers: [
-        SliverPadding(
-          padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
-          sliver: SliverToBoxAdapter(
-            child: _SectionHeader(title: 'My Library'),
-          ),
-        ),
-        SliverPadding(
-          padding: EdgeInsets.symmetric(horizontal: 24.w),
-          sliver: SliverGrid(
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              crossAxisSpacing: 16.w,
-              mainAxisSpacing: 16.h,
-              childAspectRatio: 0.68,
-            ),
-            delegate: SliverChildBuilderDelegate((context, index) {
-              final book = books[index];
-              return _BookCard(book: book, onTap: () => onOpenBook(book));
-            }, childCount: books.length),
-          ),
-        ),
-        SliverPadding(
-          padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
-          sliver: SliverToBoxAdapter(
-            child: _SectionHeader(title: 'Discover Reads'),
-          ),
-        ),
-        SliverToBoxAdapter(
-          child: SizedBox(
-            height: 220.h,
-            child: ListView.separated(
-              padding: EdgeInsets.symmetric(horizontal: 24.w),
-              scrollDirection: Axis.horizontal,
-              itemBuilder: (context, index) {
-                final book = _discoverBooks[index];
-                return _DiscoverBookCard(
-                  book: book,
-                  onTap: () => onOpenBook(book),
-                );
-              },
-              separatorBuilder: (_, __) => SizedBox(width: 16.w),
-              itemCount: _discoverBooks.length,
-            ),
-          ),
-        ),
-        SliverToBoxAdapter(child: SizedBox(height: 24.h)),
-      ],
+  // Create a demo book that always shows the sample.epub
+  Book _getDemoBook() {
+    return Book(
+      id: -1, // Special ID for demo book
+      title: 'Sample Book',
+      author: 'Demo Author',
+      ownerId: 0,
+      progress: 0.0,
+      createdAt: DateTime.now(),
+      coverImageUrl: null,
     );
   }
-}
-
-class _MyMatesTab extends StatelessWidget {
-  const _MyMatesTab();
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (errorMessage != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'Error loading books',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              errorMessage!,
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: onRefresh, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
+
+    // Always show demo book, even if user has no books
+
+    final crossAxisCount = ScreenUtil().screenWidth > 540 ? 3 : 2;
+    final demoBook = _getDemoBook();
+
     return RefreshIndicator(
       onRefresh: () async {
-        await Future.delayed(const Duration(milliseconds: 800));
+        onRefresh?.call();
+        await Future.delayed(const Duration(seconds: 1));
       },
-      child: ListView.separated(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(24.w, 16.h, 24.w, 100.h),
-        itemBuilder: (context, index) {
-          final message = _mateMessages[index];
-          return _MessageCard(message: message);
-        },
-        separatorBuilder: (_, __) => SizedBox(height: 16.h),
-        itemCount: _mateMessages.length,
+      child: CustomScrollView(
+        slivers: [
+          // Demo Book Section
+          SliverPadding(
+            padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
+            sliver: SliverToBoxAdapter(
+              child: SectionHeader(title: 'Demo Book'),
+            ),
+          ),
+          SliverPadding(
+            padding: EdgeInsets.symmetric(horizontal: 24.w),
+            sliver: SliverGrid(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                crossAxisSpacing: 16.w,
+                mainAxisSpacing: 16.h,
+                childAspectRatio: 0.68,
+              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                return _BookCard(
+                  book: demoBook,
+                  onTap: () => onOpenBook(demoBook),
+                  onDelete: null, // Demo book cannot be deleted
+                );
+              }, childCount: 1),
+            ),
+          ),
+          // My Library Section
+          SliverPadding(
+            padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
+            sliver: SliverToBoxAdapter(
+              child: SectionHeader(title: 'My Library'),
+            ),
+          ),
+          SliverPadding(
+            padding: EdgeInsets.symmetric(horizontal: 24.w),
+            sliver: SliverGrid(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                crossAxisSpacing: 16.w,
+                mainAxisSpacing: 16.h,
+                childAspectRatio: 0.68,
+              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final book = books[index];
+                return _BookCard(
+                  book: book,
+                  onTap: () => onOpenBook(book),
+                  onDelete: () => onDeleteBook(book.id),
+                );
+              }, childCount: books.length),
+            ),
+          ),
+          SliverToBoxAdapter(child: SizedBox(height: 24.h)),
+        ],
       ),
-    );
-  }
-}
-
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      title,
-      style: Theme.of(
-        context,
-      ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
     );
   }
 }
 
 class _BookCard extends StatelessWidget {
-  const _BookCard({required this.book, required this.onTap});
+  const _BookCard({required this.book, required this.onTap, this.onDelete});
 
-  final _BookData book;
+  final Book book;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
+
+  // Generate a color from the book title hash
+  Color _getBookColor() {
+    final hash = book.title.hashCode;
+    final colors = [
+      const Color(0xFF7B61FF),
+      const Color(0xFFFF6584),
+      const Color(0xFF00BFA5),
+      const Color(0xFF4DD0E1),
+      const Color(0xFFFFA726),
+      const Color(0xFF26C6DA),
+      const Color(0xFFA1887F),
+    ];
+    return colors[hash.abs() % colors.length];
+  }
 
   @override
   Widget build(BuildContext context) {
+    final bookColor = _getBookColor();
+    final hasCoverImage =
+        book.coverImageUrl != null && book.coverImageUrl!.isNotEmpty;
+
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onDelete != null
+          ? () {
+              // Show delete dialog
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Delete Book'),
+                  content: Text(
+                    'Are you sure you want to delete "${book.title}"?',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        onDelete!();
+                      },
+                      style: TextButton.styleFrom(foregroundColor: Colors.red),
+                      child: const Text('Delete'),
+                    ),
+                  ],
+                ),
+              );
+            }
+          : null,
       child: Card(
         elevation: 3,
         shape: RoundedRectangleBorder(
@@ -336,24 +688,27 @@ class _BookCard extends StatelessWidget {
             Positioned.fill(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: book.coverImage != null ? Colors.black : null,
-                  gradient: book.coverImage == null
+                  color: hasCoverImage ? Colors.black : null,
+                  gradient: !hasCoverImage
                       ? LinearGradient(
-                          colors: [book.color, book.color.withOpacity(0.7)],
+                          colors: [bookColor, bookColor.withOpacity(0.7)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         )
                       : null,
-                  image: book.coverImage != null
+                  image: hasCoverImage
                       ? DecorationImage(
-                          image: MemoryImage(book.coverImage!),
+                          image: NetworkImage(book.coverImageUrl!),
                           fit: BoxFit.cover,
+                          onError: (_, __) {
+                            // Handle image load error - fallback to gradient
+                          },
                         )
                       : null,
                 ),
               ),
             ),
-            if (book.coverImage != null)
+            if (hasCoverImage)
               Positioned.fill(
                 child: DecoratedBox(
                   decoration: BoxDecoration(
@@ -386,7 +741,7 @@ class _BookCard extends StatelessWidget {
                     ),
                     SizedBox(height: 4.h),
                     Text(
-                      book.subtitle,
+                      book.author,
                       style: Theme.of(
                         context,
                       ).textTheme.bodySmall?.copyWith(color: Colors.white70),
@@ -402,7 +757,7 @@ class _BookCard extends StatelessWidget {
               child: SizedBox(
                 height: 6.h,
                 child: LinearProgressIndicator(
-                  value: book.progress,
+                  value: book.progress.clamp(0.0, 1.0),
                   color: Theme.of(context).colorScheme.primary,
                   backgroundColor: Colors.white.withOpacity(0.15),
                 ),
@@ -415,334 +770,176 @@ class _BookCard extends StatelessWidget {
   }
 }
 
-class _DiscoverBookCard extends StatelessWidget {
-  const _DiscoverBookCard({required this.book, required this.onTap});
-
-  final _BookData book;
-  final VoidCallback onTap;
+class _AddMateDialog extends StatefulWidget {
+  const _AddMateDialog();
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: 160.w,
-        child: Card(
-          elevation: 3,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20.r),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [book.color, book.color.withOpacity(0.65)],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                ),
-              ),
-              Positioned.fill(
-                child: Padding(
-                  padding: EdgeInsets.all(16.w),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Text(
-                        book.title,
-                        style: Theme.of(context).textTheme.titleMedium
-                            ?.copyWith(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      SizedBox(height: 4.h),
-                      Text(
-                        book.subtitle,
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodySmall?.copyWith(color: Colors.white70),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  State<_AddMateDialog> createState() => _AddMateDialogState();
 }
 
-class _MessageCard extends StatelessWidget {
-  const _MessageCard({required this.message});
+class _AddMateDialogState extends State<_AddMateDialog> {
+  late final TextEditingController _searchController;
+  final UserService _userService = UserService();
+  final MateService _mateService = MateService();
+  List<User> _searchResults = [];
+  bool _isSearching = false;
+  String _searchQuery = '';
+  Timer? _searchDebounce;
 
-  final _MateMessage message;
+  @override
+  void initState() {
+    super.initState();
+    _searchController = TextEditingController();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    final query = _searchController.text.trim();
+
+    // Cancel previous debounce timer
+    _searchDebounce?.cancel();
+
+    setState(() {
+      _searchQuery = query;
+      if (query.length < 2) {
+        _searchResults = [];
+        _isSearching = false;
+      }
+    });
+
+    if (query.length < 2) {
+      return;
+    }
+
+    // Debounce search to avoid too many API calls
+    _searchDebounce = Timer(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
+      _performSearch(query);
+    });
+  }
+
+  Future<void> _performSearch(String query) async {
+    if (!mounted) return;
+
+    setState(() {
+      _isSearching = true;
+    });
+
+    try {
+      final results = await _userService.searchUsers(query);
+      if (!mounted) return;
+
+      setState(() {
+        _searchResults = results;
+        _isSearching = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isSearching = false;
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _addMate(User user) async {
+    try {
+      await _mateService.addMateRequest(user.username);
+      if (!mounted) return;
+
+      Navigator.of(context).pop();
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Mate request sent')));
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final textTheme = Theme.of(context).textTheme;
-    final mutedBodyColor = textTheme.bodySmall?.color != null
-        ? textTheme.bodySmall!.color!.withOpacity(0.7)
-        : colorScheme.onSurfaceVariant.withOpacity(0.7);
-    final mutedLabelColor = textTheme.labelSmall?.color != null
-        ? textTheme.labelSmall!.color!.withOpacity(0.7)
-        : colorScheme.onSurfaceVariant.withOpacity(0.7);
-
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20.r)),
-      child: Padding(
-        padding: EdgeInsets.all(16.w),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return AlertDialog(
+      title: const Text('Add Mate'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            CircleAvatar(
-              radius: 24.r,
-              backgroundColor: colorScheme.primary.withOpacity(0.15),
-              child: Text(
-                message.initials,
-                style: textTheme.titleMedium?.copyWith(
-                  color: colorScheme.primary,
-                  fontWeight: FontWeight.bold,
-                ),
+            TextField(
+              controller: _searchController,
+              decoration: const InputDecoration(
+                labelText: 'Search by username or email',
+                hintText: 'Enter username or email',
+                prefixIcon: Icon(Icons.search),
               ),
             ),
-            SizedBox(width: 16.w),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(message.snippet, style: textTheme.bodyLarge),
-                  SizedBox(height: 8.h),
-                  Text(
-                    '— from ${message.bookTitle}',
-                    style: textTheme.bodySmall?.copyWith(color: mutedBodyColor),
-                  ),
-                  SizedBox(height: 12.h),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Wrap(
-                          spacing: 12.w,
-                          runSpacing: 8.h,
-                          children: message.reactions
-                              .map(
-                                (reaction) => Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 12.w,
-                                    vertical: 6.h,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: colorScheme.primary.withOpacity(
-                                      0.08,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12.r),
-                                  ),
-                                  child: Text(
-                                    reaction,
-                                    style: textTheme.labelMedium,
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                        ),
+            const SizedBox(height: 16),
+            if (_isSearching)
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: CircularProgressIndicator(),
+              )
+            else if (_searchResults.isEmpty && _searchQuery.length >= 2)
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text('No users found'),
+              )
+            else if (_searchResults.isNotEmpty)
+              SizedBox(
+                height: 200,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _searchResults.length,
+                  itemBuilder: (context, index) {
+                    final user = _searchResults[index];
+                    return ListTile(
+                      leading: CircleAvatar(child: Text(user.initials)),
+                      title: Text(user.username),
+                      subtitle: Text(user.email),
+                      trailing: ElevatedButton(
+                        onPressed: () => _addMate(user),
+                        child: const Text('Add'),
                       ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            'Shared by ${message.sender}',
-                            style: textTheme.bodySmall?.copyWith(
-                              color: mutedBodyColor,
-                            ),
-                          ),
-                          SizedBox(height: 4.h),
-                          Text(
-                            message.timeLabel,
-                            style: textTheme.labelSmall?.copyWith(
-                              color: mutedLabelColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            SizedBox(width: 12.w),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(14.r),
-              child: Container(
-                width: 54.w,
-                height: 72.h,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      colorScheme.secondaryContainer,
-                      colorScheme.primaryContainer,
-                    ],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  message.bookInitials,
-                  style: textTheme.labelLarge?.copyWith(
-                    color: colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
+                    );
+                  },
                 ),
               ),
-            ),
           ],
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
     );
   }
 }
-
-class _BookData {
-  const _BookData({
-    required this.title,
-    required this.subtitle,
-    required this.progress,
-    required this.color,
-    this.assetPath,
-    this.coverImage,
-  });
-
-  final String title;
-  final String subtitle;
-  final double progress;
-  final Color color;
-  final String? assetPath;
-  final Uint8List? coverImage;
-}
-
-class _MateMessage {
-  const _MateMessage({
-    required this.sender,
-    required this.snippet,
-    required this.bookTitle,
-    required this.timeLabel,
-    required this.reactions,
-  });
-
-  final String sender;
-  final String snippet;
-  final String bookTitle;
-  final String timeLabel;
-  final List<String> reactions;
-
-  String get initials {
-    final trimmed = sender.trim();
-    if (trimmed.isEmpty) {
-      return '';
-    }
-    final parts = trimmed.split(RegExp(r'\s+'));
-    final first = parts.first.isNotEmpty ? parts.first[0] : '';
-    final last = parts.length > 1 && parts[1].isNotEmpty ? parts[1][0] : '';
-    return (first + last).toUpperCase();
-  }
-
-  String get bookInitials {
-    final words = bookTitle.trim().split(RegExp(r'\s+'));
-    final buffer = StringBuffer();
-    for (final word in words) {
-      if (word.isEmpty) continue;
-      buffer.write(word[0].toUpperCase());
-      if (buffer.length == 2) break;
-    }
-    return buffer.toString();
-  }
-}
-
-final _BookData _placeholderAssetBook = _BookData(
-  title: 'Sample EPUB',
-  subtitle: 'Loading...',
-  progress: 0.0,
-  color: const Color(0xFF7B61FF),
-  assetPath: _defaultAssetPath,
-);
-
-final List<_BookData> _additionalLibraryBooks = [
-  const _BookData(
-    title: 'Atomic Habits',
-    subtitle: 'James Clear',
-    progress: 0.34,
-    color: const Color(0xFFFF6584),
-  ),
-  const _BookData(
-    title: 'Dune',
-    subtitle: 'Frank Herbert',
-    progress: 0.9,
-    color: const Color(0xFF00BFA5),
-  ),
-  const _BookData(
-    title: 'The Pragmatic Programmer',
-    subtitle: 'Andrew Hunt',
-    progress: 0.18,
-    color: const Color(0xFF4DD0E1),
-  ),
-];
-
-final List<_BookData> _discoverBooks = [
-  _BookData(
-    title: 'The Midnight Library',
-    subtitle: 'Matt Haig',
-    progress: 0.0,
-    color: const Color(0xFFFFA726),
-  ),
-  _BookData(
-    title: 'Project Hail Mary',
-    subtitle: 'Andy Weir',
-    progress: 0.0,
-    color: const Color(0xFF26C6DA),
-  ),
-  _BookData(
-    title: 'Tomorrow, and Tomorrow, and Tomorrow',
-    subtitle: 'Gabrielle Zevin',
-    progress: 0.0,
-    color: const Color(0xFFA1887F),
-  ),
-];
-
-final List<_MateMessage> _mateMessages = [
-  _MateMessage(
-    sender: 'Alex Carter',
-    snippet:
-        '“We are what we repeatedly do. Excellence, then, is not an act but a habit.”',
-    bookTitle: 'Atomic Habits',
-    timeLabel: '5 min ago',
-    reactions: ['🔥 12', '👏 4'],
-  ),
-  _MateMessage(
-    sender: 'Priya Patel',
-    snippet:
-        '“Fear is the mind-killer. Fear is the little-death that brings total obliteration.”',
-    bookTitle: 'Dune',
-    timeLabel: '2 hrs ago',
-    reactions: ['💡 8', '🚀 3'],
-  ),
-  _MateMessage(
-    sender: 'Jonas Meyer',
-    snippet:
-        '“Hope is being able to see that there is light despite all of the darkness.”',
-    bookTitle: 'The Midnight Library',
-    timeLabel: 'Yesterday',
-    reactions: ['🌙 5', '💬 2'],
-  ),
-];

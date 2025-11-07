@@ -1,12 +1,16 @@
 import 'theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:passage/home_screen.dart';
+import 'package:passage/auth/login_screen.dart';
+import 'package:passage/services/api_service.dart';
+import 'package:passage/services/auth_service.dart';
 
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-
 void main() {
+  // Initialize API service
+  ApiService().init();
   runApp(const PassageApp());
 }
 
@@ -19,11 +23,27 @@ class PassageApp extends StatefulWidget {
 
 class _PassageAppState extends State<PassageApp> {
   AppThemeMode _appThemeMode = AppThemeMode.light;
+  bool _isAuthenticated = false;
+  bool _isLoading = true;
+  final _authService = AuthService();
 
   @override
   void initState() {
     super.initState();
-    _restoreTheme();
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    await _restoreTheme();
+    await _checkAuthentication();
+  }
+
+  Future<void> _checkAuthentication() async {
+    final isAuth = await _authService.isAuthenticated();
+    setState(() {
+      _isAuthenticated = isAuth;
+      _isLoading = false;
+    });
   }
 
   Future<void> _restoreTheme() async {
@@ -69,10 +89,14 @@ class _PassageAppState extends State<PassageApp> {
           title: 'Passage EPUB Reader',
           theme: themeData,
           debugShowCheckedModeBanner: false,
-          home: HomeScreen(
-            appThemeMode: _appThemeMode,
-            onThemeChanged: _onChangeTheme,
-          ),
+          home: _isLoading
+              ? const Scaffold(body: Center(child: CircularProgressIndicator()))
+              : _isAuthenticated
+              ? HomeScreen(
+                  appThemeMode: _appThemeMode,
+                  onThemeChanged: _onChangeTheme,
+                )
+              : LoginScreen(),
         );
       },
     );
