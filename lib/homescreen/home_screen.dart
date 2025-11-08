@@ -221,7 +221,12 @@ class _HomeScreenState extends State<HomeScreen> {
     // In a real app, you'd need to handle EPUB file storage/retrieval
     final assetPath = book.id < 0 ? _defaultAssetPath : _defaultAssetPath;
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => EpubReaderPage(assetPath: assetPath)),
+      MaterialPageRoute(
+        builder: (_) => EpubReaderPage(
+          assetPath: assetPath,
+          book: book,
+        ),
+      ),
     );
   }
 

@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
+import '../models/book.dart';
 import 'models/bookmark.dart';
 import 'models/highlight.dart';
 import 'services/epub_settings_service.dart';
@@ -14,11 +15,17 @@ import 'widgets/empty_state.dart';
 import 'widgets/reader_controls.dart';
 import 'widgets/reader_drawer.dart';
 import 'widgets/highlight_context_menu.dart';
+import 'widgets/share_snippet_dialog.dart';
 
 class EpubReaderPage extends StatefulWidget {
-  const EpubReaderPage({super.key, this.assetPath});
+  const EpubReaderPage({
+    super.key,
+    this.assetPath,
+    this.book,
+  });
 
   final String? assetPath; // If null, user can pick a file
+  final Book? book; // Book metadata for snippet sharing
 
   @override
   State<EpubReaderPage> createState() => _EpubReaderPageState();
@@ -391,6 +398,7 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
                   },
                   selectionContextMenu: HighlightContextMenu.build(
                     onHighlight: _applyHighlight,
+                    onShareSnippet: widget.book != null ? _showShareSnippetDialog : null,
                   ),
                   onRelocated: (loc) {
                     final v = loc as dynamic;
@@ -484,5 +492,47 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
         );
       },
     );
+  }
+
+  Future<void> _showShareSnippetDialog() async {
+    if (widget.book == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Book information not available'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (_selectedText == null || _selectedText!.trim().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No text selected. Please select some text to share.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => ShareSnippetDialog(
+        book: widget.book!,
+        snippetText: _selectedText!.trim(),
+      ),
+    );
+
+    // Clear selection after sharing (if successful)
+    if (result == true && mounted) {
+      setState(() {
+        _selectedText = null;
+        _selectedCfi = null;
+      });
+    }
   }
 }

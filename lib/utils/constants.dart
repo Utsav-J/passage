@@ -1,6 +1,6 @@
 class ApiConstants {
   // Base URL for the BookMate API
-  static const String baseUrl = 'https://c921dc921426.ngrok-free.app';
+  static const String baseUrl = 'https://a473221a2c68.ngrok-free.app';
 
   // API endpoints
   static const String authRegister = '/auth/register';

@@ -5,6 +5,7 @@ import '../utils/color_utils.dart';
 class HighlightContextMenu {
   static ContextMenu build({
     required void Function(Color color) onHighlight,
+    void Function()? onShareSnippet,
   }) {
     final menuItems = <ContextMenuItem>[];
 
@@ -17,6 +18,17 @@ class HighlightContextMenu {
           id: i + 1, // Use integer ID starting from 1
           title: ColorUtils.getColorCircleEmoji(color),
           action: () => onHighlight(color),
+        ),
+      );
+    }
+
+    // Add Share Snippet option if callback is provided
+    if (onShareSnippet != null) {
+      menuItems.add(
+        ContextMenuItem(
+          id: ColorUtils.highlightColors.length + 1,
+          title: '📤 Share Snippet',
+          action: onShareSnippet,
         ),
       );
     }
