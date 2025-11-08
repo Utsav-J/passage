@@ -130,118 +130,111 @@ class MyMatesTabState extends State<MyMatesTab> {
           SliverPadding(
             padding: EdgeInsets.fromLTRB(24.w, 16.h, 24.w, 8.h),
             sliver: SliverToBoxAdapter(
-              child: SectionHeader(
-                title: 'My Mates',
-                trailing: TextButton(
-                  onPressed: _showMateRequestsDialog,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'requests',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.primary,
+              child: Container(
+                padding: EdgeInsets.all(20.w),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F5F0), // Light beige/off-white
+                  borderRadius: BorderRadius.circular(16.r),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header with title and requests button
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          'My mates',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF2C2C2C), // Dark grey/black
+                            fontSize: 18.sp,
+                          ),
+                        ),
+                        _RequestsButton(
+                          onPressed: _showMateRequestsDialog,
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 20.h),
+                    // Mates list
+                    if (_errorMessageMates != null)
+                      Container(
+                        padding: EdgeInsets.all(16.w),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.errorContainer,
+                          borderRadius: BorderRadius.circular(12.r),
+                        ),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Error loading mates',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                            SizedBox(height: 8.h),
+                            Text(
+                              _errorMessageMates!,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            SizedBox(height: 8.h),
+                            ElevatedButton(
+                              onPressed: _loadMates,
+                              child: const Text('Retry'),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (_mates.isEmpty)
+                      Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24.h),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.people_outline,
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                            SizedBox(width: 12.w),
+                            Expanded(
+                              child: Text(
+                                'No mates yet. Add mates to start sharing snippets!',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      SizedBox(
+                        height: 120.h,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _mates.length,
+                          separatorBuilder: (_, __) => SizedBox(width: 16.w),
+                          itemBuilder: (context, index) {
+                            final mate = _mates[index];
+                            return _MateCard(
+                              mate: mate,
+                              onRemove: () => _removeMate(mate.mate?.username ?? ''),
+                              onTap: () => _showMateDetailDialog(mate),
+                            );
+                          },
                         ),
                       ),
-                      Icon(
-                        Icons.chevron_right,
-                        size: 18,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             ),
           ),
-          if (_errorMessageMates != null)
-            SliverPadding(
-              padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 8.h),
-              sliver: SliverToBoxAdapter(
-                child: Container(
-                  padding: EdgeInsets.all(16.w),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        'Error loading mates',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                      SizedBox(height: 8.h),
-                      Text(
-                        _errorMessageMates!,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                      SizedBox(height: 8.h),
-                      ElevatedButton(
-                        onPressed: _loadMates,
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          else if (_mates.isEmpty)
-            SliverPadding(
-              padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 8.h),
-              sliver: SliverToBoxAdapter(
-                child: Container(
-                  padding: EdgeInsets.all(24.w),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.surfaceContainerHighest.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(12.r),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.people_outline,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                      SizedBox(width: 12.w),
-                      Expanded(
-                        child: Text(
-                          'No mates yet. Add mates to start sharing snippets!',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurfaceVariant,
-                              ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          else
-            SliverPadding(
-              padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 8.h),
-              sliver: SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 140.h,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _mates.length,
-                    separatorBuilder: (_, __) => SizedBox(width: 12.w),
-                    itemBuilder: (context, index) {
-                      final mate = _mates[index];
-                      return _MateCard(
-                        mate: mate,
-                        onRemove: () => _removeMate(mate.mate?.username ?? ''),
-                        onTap: () => _showMateDetailDialog(mate),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
 
           // Snippets Section
           SliverPadding(
@@ -344,53 +337,69 @@ class _MateCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final mateUser = mate.mate;
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 100.w,
-        padding: EdgeInsets.all(8.w),
-        decoration: BoxDecoration(
-          color: colorScheme.surface,
-          borderRadius: BorderRadius.circular(12.r),
-          border: Border.all(color: colorScheme.outline.withOpacity(0.2)),
-        ),
-        child: Stack(
-          children: [
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                MateAvatar(mateUser: mateUser, mateId: mate.mateId, size: 70.w),
-                SizedBox(height: 8.h),
-                Text(
-                  mateUser?.username ?? 'User ${mate.mateId}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                ),
-              ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Circular avatar
+          MateAvatar(
+            mateUser: mateUser,
+            mateId: mate.mateId,
+            size: 60.w,
+          ),
+          SizedBox(height: 8.h),
+          // Name below avatar
+          Text(
+            mateUser?.username ?? 'User ${mate.mateId}',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: const Color(0xFF2C2C2C), // Dark grey/black
+              fontSize: 13.sp,
+              fontWeight: FontWeight.normal,
             ),
-            Positioned(
-              top: 0,
-              right: 0,
-              child: GestureDetector(
-                onTap: onRemove,
-                child: Container(
-                  padding: EdgeInsets.all(4.w),
-                  decoration: BoxDecoration(
-                    color: colorScheme.error,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.close,
-                    size: 16.sp,
-                    color: colorScheme.onError,
-                  ),
-                ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RequestsButton extends StatelessWidget {
+  const _RequestsButton({
+    required this.onPressed,
+  });
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+        decoration: BoxDecoration(
+          color: const Color(0xFFE8D5C4), // Light muted orange/beige
+          borderRadius: BorderRadius.circular(8.r),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.person_add,
+              size: 16.sp,
+              color: const Color(0xFF3A3A3A), // Dark brown/black
+            ),
+            SizedBox(width: 6.w),
+            Text(
+              'requests',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: const Color(0xFF3A3A3A), // Dark brown/black
+                fontSize: 13.sp,
+                fontWeight: FontWeight.normal,
               ),
             ),
           ],

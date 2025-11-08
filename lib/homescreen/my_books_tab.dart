@@ -23,19 +23,6 @@ class MyBooksTab extends StatelessWidget {
   final String? errorMessage;
   final VoidCallback? onRefresh;
 
-  // Create a demo book that always shows the sample.epub
-  Book _getDemoBook() {
-    return Book(
-      id: -1, // Special ID for demo book
-      title: 'Sample Book',
-      author: 'Demo Author',
-      ownerId: 0,
-      progress: 0.0,
-      createdAt: DateTime.now(),
-      coverImageUrl: null,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
@@ -64,72 +51,77 @@ class MyBooksTab extends StatelessWidget {
       );
     }
 
-    // Always show demo book, even if user has no books
-
     final crossAxisCount = ScreenUtil().screenWidth > 540 ? 3 : 2;
-    final demoBook = _getDemoBook();
 
     return RefreshIndicator(
       onRefresh: () async {
         onRefresh?.call();
         await Future.delayed(const Duration(seconds: 1));
       },
-      child: CustomScrollView(
-        slivers: [
-          // Demo Book Section
-          SliverPadding(
-            padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
-            sliver: SliverToBoxAdapter(
-              child: SectionHeader(title: 'Demo Book'),
+      child: books.isEmpty
+          ? CustomScrollView(
+              slivers: [
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.menu_book_outlined,
+                          size: 64.sp,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                        SizedBox(height: 16.h),
+                        Text(
+                          'No books yet',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        SizedBox(height: 8.h),
+                        Text(
+                          'Add books to start reading',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
+                  sliver: SliverToBoxAdapter(
+                    child: SectionHeader(title: 'My Books'),
+                  ),
+                ),
+                SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: 24.w),
+                  sliver: SliverGrid(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: crossAxisCount,
+                      crossAxisSpacing: 16.w,
+                      mainAxisSpacing: 16.h,
+                      childAspectRatio: 0.68,
+                    ),
+                    delegate: SliverChildBuilderDelegate((context, index) {
+                      final book = books[index];
+                      // Prevent deletion of the sample book
+                      final isSampleBook = book.title == 'Sample Book' && book.author == 'Demo Author';
+                      return BookCard(
+                        book: book,
+                        onTap: () => onOpenBook(book),
+                        onDelete: isSampleBook ? null : () => onDeleteBook(book.id),
+                      );
+                    }, childCount: books.length),
+                  ),
+                ),
+                SliverToBoxAdapter(child: SizedBox(height: 24.h)),
+              ],
             ),
-          ),
-          SliverPadding(
-            padding: EdgeInsets.symmetric(horizontal: 24.w),
-            sliver: SliverGrid(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
-                crossAxisSpacing: 16.w,
-                mainAxisSpacing: 16.h,
-                childAspectRatio: 0.68,
-              ),
-              delegate: SliverChildBuilderDelegate((context, index) {
-                return BookCard(
-                  book: demoBook,
-                  onTap: () => onOpenBook(demoBook),
-                  onDelete: null, // Demo book cannot be deleted
-                );
-              }, childCount: 1),
-            ),
-          ),
-          // My Library Section
-          SliverPadding(
-            padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 16.h),
-            sliver: SliverToBoxAdapter(
-              child: SectionHeader(title: 'My Library'),
-            ),
-          ),
-          SliverPadding(
-            padding: EdgeInsets.symmetric(horizontal: 24.w),
-            sliver: SliverGrid(
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
-                crossAxisSpacing: 16.w,
-                mainAxisSpacing: 16.h,
-                childAspectRatio: 0.68,
-              ),
-              delegate: SliverChildBuilderDelegate((context, index) {
-                final book = books[index];
-                return BookCard(
-                  book: book,
-                  onTap: () => onOpenBook(book),
-                  onDelete: () => onDeleteBook(book.id),
-                );
-              }, childCount: books.length),
-            ),
-          ),
-          SliverToBoxAdapter(child: SizedBox(height: 24.h)),
-        ],
-      ),
     );
   }
 }

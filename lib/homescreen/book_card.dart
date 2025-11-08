@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:passage/models/book.dart';
+import 'package:passage/utils/image_utils.dart';
 
 class BookCard extends StatelessWidget {
   const BookCard({
@@ -34,6 +36,7 @@ class BookCard extends StatelessWidget {
     final bookColor = _getBookColor();
     final hasCoverImage =
         book.coverImageUrl != null && book.coverImageUrl!.isNotEmpty;
+    final isBase64Image = hasCoverImage && ImageUtils.isBase64DataUrl(book.coverImageUrl!);
 
     return GestureDetector(
       onTap: onTap,
@@ -74,27 +77,17 @@ class BookCard extends StatelessWidget {
         child: Stack(
           children: [
             Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: hasCoverImage ? Colors.black : null,
-                  gradient: !hasCoverImage
-                      ? LinearGradient(
-                          colors: [bookColor, bookColor.withOpacity(0.7)],
+              child: hasCoverImage
+                  ? _buildCoverImage(book.coverImageUrl!, isBase64Image)
+                  : DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [bookColor, bookColor.withValues(alpha: 0.7)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
-                        )
-                      : null,
-                  image: hasCoverImage
-                      ? DecorationImage(
-                          image: NetworkImage(book.coverImageUrl!),
-                          fit: BoxFit.cover,
-                          onError: (_, __) {
-                            // Handle image load error - fallback to gradient
-                          },
-                        )
-                      : null,
-                ),
-              ),
+                        ),
+                      ),
+                    ),
             ),
             if (hasCoverImage)
               Positioned.fill(
@@ -104,8 +97,8 @@ class BookCard extends StatelessWidget {
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
-                        Colors.black.withOpacity(0.05),
-                        Colors.black.withOpacity(0.7),
+                        Colors.black.withValues(alpha: 0.05),
+                        Colors.black.withValues(alpha: 0.7),
                       ],
                     ),
                   ),
@@ -118,6 +111,7 @@ class BookCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.end,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Title on first line (max 2 lines)
                     Text(
                       book.title,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -128,11 +122,14 @@ class BookCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     SizedBox(height: 4.h),
+                    // Author on second line (max 1 line)
                     Text(
                       book.author,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(color: Colors.white70),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white70,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -147,7 +144,7 @@ class BookCard extends StatelessWidget {
                 child: LinearProgressIndicator(
                   value: book.progress.clamp(0.0, 1.0),
                   color: Theme.of(context).colorScheme.primary,
-                  backgroundColor: Colors.white.withOpacity(0.15),
+                  backgroundColor: Colors.white.withValues(alpha: 0.15),
                 ),
               ),
             ),
@@ -155,5 +152,31 @@ class BookCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildCoverImage(String coverImageUrl, bool isBase64) {
+    if (isBase64) {
+      try {
+        final base64String = ImageUtils.extractBase64FromDataUrl(coverImageUrl);
+        final imageBytes = base64Decode(base64String);
+        return Image.memory(
+          imageBytes,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Container(color: Colors.grey[300]);
+          },
+        );
+      } catch (e) {
+        return Container(color: Colors.grey[300]);
+      }
+    } else {
+      return Image.network(
+        coverImageUrl,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(color: Colors.grey[300]);
+        },
+      );
+    }
   }
 }

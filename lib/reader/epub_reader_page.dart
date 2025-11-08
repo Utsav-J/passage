@@ -21,10 +21,12 @@ class EpubReaderPage extends StatefulWidget {
   const EpubReaderPage({
     super.key,
     this.assetPath,
+    this.filePath,
     this.book,
   });
 
-  final String? assetPath; // If null, user can pick a file
+  final String? assetPath; // Asset path (e.g., 'assets/books/sample.epub')
+  final String? filePath; // File system path for uploaded books
   final Book? book; // Book metadata for snippet sharing
 
   @override
@@ -46,23 +48,25 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
   String? _currentCfi;
   int? _currentPage;
 
-  // Generate book ID from asset path
-  String get _bookId => widget.assetPath ?? 'unknown';
+  // Generate book ID from asset path or file path
+  String get _bookId => widget.assetPath ?? widget.filePath ?? widget.book?.id.toString() ?? 'unknown';
 
   @override
   void initState() {
     super.initState();
-    // If assetPath is provided, initialize immediately
+    // If assetPath or filePath is provided, initialize immediately
     if (widget.assetPath != null) {
       _initializeAsset();
+    } else if (widget.filePath != null) {
+      _initializeFile();
     }
-    // Restore settings and apply font size if asset is already loaded
+    // Restore settings and apply font size if source is already loaded
     _restoreSettings().then((_) {
       if (_controller != null) {
         _controller!.setFontSize(fontSize: _fontSize);
       }
-      if (widget.assetPath == null) {
-        // Only open initial if no asset path (for file picker flow)
+      if (widget.assetPath == null && widget.filePath == null) {
+        // Only open initial if no path provided (for file picker flow)
         _openInitial();
       }
     });
@@ -74,6 +78,15 @@ class _EpubReaderPageState extends State<EpubReaderPage> {
       _openedSourceLabel = 'Asset';
       _controller = controller;
       _source = EpubSource.fromAsset(widget.assetPath!);
+    });
+  }
+
+  void _initializeFile() {
+    final controller = EpubController();
+    setState(() {
+      _openedSourceLabel = 'File';
+      _controller = controller;
+      _source = EpubSource.fromFile(File(widget.filePath!));
     });
   }
 

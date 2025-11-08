@@ -5,7 +5,6 @@ import '../../models/mate.dart';
 import '../../profile/mate_avatar.dart';
 import '../../services/mate_service.dart';
 import '../../services/snippet_service.dart';
-import '../../services/book_service.dart';
 
 class ShareSnippetDialog extends StatefulWidget {
   const ShareSnippetDialog({
@@ -24,7 +23,6 @@ class ShareSnippetDialog extends StatefulWidget {
 class _ShareSnippetDialogState extends State<ShareSnippetDialog> {
   final MateService _mateService = MateService();
   final SnippetService _snippetService = SnippetService();
-  final BookService _bookService = BookService();
   final TextEditingController _noteController = TextEditingController();
 
   List<Mate> _mates = [];
@@ -67,41 +65,6 @@ class _ShareSnippetDialogState extends State<ShareSnippetDialog> {
     }
   }
 
-  Future<Book?> _ensureBookExists() async {
-    // If book ID is negative (demo book), we need to add it to the library first
-    if (widget.book.id <= 0) {
-      try {
-        // Add the demo book to the user's library
-        final newBook = await _bookService.addBook(
-          title: widget.book.title,
-          author: widget.book.author,
-          coverImageUrl: widget.book.coverImageUrl,
-          progress: widget.book.progress,
-        );
-
-        if (!mounted) return null;
-
-        return newBook;
-      } catch (e) {
-        if (!mounted) return null;
-        setState(() {
-          _errorMessage = e.toString().replaceFirst('Exception: ', '');
-          _isSending = false;
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to add book to library: ${_errorMessage ?? 'Unknown error'}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return null;
-      }
-    }
-
-    // Book already exists in library
-    return widget.book;
-  }
 
   Future<void> _sendSnippet() async {
     if (_selectedMateId == null) {
@@ -130,16 +93,9 @@ class _ShareSnippetDialogState extends State<ShareSnippetDialog> {
     });
 
     try {
-      // Ensure the book exists in the library (for demo books)
-      final bookToUse = await _ensureBookExists();
-      if (bookToUse == null) {
-        // Error already shown in _ensureBookExists
-        return;
-      }
-
       await _snippetService.sendSnippet(
         mateId: _selectedMateId!,
-        bookId: bookToUse.id,
+        bookId: widget.book.id,
         text: widget.snippetText.trim(),
         note: _noteController.text.trim().isEmpty
             ? null
@@ -149,17 +105,13 @@ class _ShareSnippetDialogState extends State<ShareSnippetDialog> {
       if (!mounted) return;
 
       // Show success message
-      final message = widget.book.id <= 0
-          ? 'Book added to library and snippet sent successfully!'
-          : 'Snippet sent successfully!';
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
               Icon(Icons.check_circle, color: Colors.white, size: 20.sp),
               SizedBox(width: 8.w),
-              Expanded(child: Text(message)),
+              const Expanded(child: Text('Snippet sent successfully!')),
             ],
           ),
           backgroundColor: Colors.green,
@@ -225,27 +177,6 @@ class _ShareSnippetDialogState extends State<ShareSnippetDialog> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        if (widget.book.id <= 0)
-                          Padding(
-                            padding: EdgeInsets.only(top: 4.h),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.info_outline,
-                                  size: 14.sp,
-                                  color: colorScheme.primary,
-                                ),
-                                SizedBox(width: 4.w),
-                                Text(
-                                  'This book will be added to your library',
-                                  style: theme.textTheme.labelSmall?.copyWith(
-                                    color: colorScheme.primary,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
                       ],
                     ),
                   ),
