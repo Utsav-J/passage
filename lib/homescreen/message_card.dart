@@ -1,10 +1,9 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:passage/models/snippet.dart';
 
 class MessageCard extends StatelessWidget {
-  const MessageCard({required this.snippet});
+  const MessageCard({required this.snippet, super.key});
 
   final Snippet snippet;
 
@@ -130,4 +129,3 @@ class MessageCard extends StatelessWidget {
     );
   }
 }
-

@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:passage/message_card.dart';
+import 'package:passage/homescreen/message_card.dart';
 import 'package:passage/models/mate.dart';
 import 'package:passage/models/snippet.dart';
-import 'package:passage/section_header.dart';
+import 'package:passage/homescreen/section_header.dart';
 import 'package:passage/services/mate_service.dart';
 import 'package:passage/services/snippet_service.dart';
 import 'package:passage/profile/mate_avatar.dart';
 import 'package:passage/profile/mate_detail_dialog.dart';
 
 class MyMatesTab extends StatefulWidget {
-  const MyMatesTab();
+  const MyMatesTab({super.key});
 
   @override
   State<MyMatesTab> createState() => MyMatesTabState();
@@ -194,7 +194,7 @@ class MyMatesTabState extends State<MyMatesTab> {
                   decoration: BoxDecoration(
                     color: Theme.of(
                       context,
-                    ).colorScheme.surfaceVariant.withOpacity(0.3),
+                    ).colorScheme.surfaceContainerHighest.withOpacity(0.3),
                     borderRadius: BorderRadius.circular(12.r),
                   ),
                   child: Row(

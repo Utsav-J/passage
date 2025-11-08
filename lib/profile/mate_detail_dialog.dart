@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:passage/models/mate.dart';
@@ -6,7 +5,11 @@ import 'package:passage/models/user.dart';
 import 'package:passage/profile/mate_avatar.dart';
 
 class MateDetailDialog extends StatelessWidget {
-  const MateDetailDialog({required this.mate, required this.mateUser});
+  const MateDetailDialog({
+    required this.mate,
+    required this.mateUser,
+    super.key,
+  });
 
   final Mate mate;
   final User? mateUser;
@@ -60,7 +63,7 @@ class MateDetailDialog extends StatelessWidget {
             Container(
               padding: EdgeInsets.all(16.w),
               decoration: BoxDecoration(
-                color: colorScheme.surfaceVariant.withOpacity(0.3),
+                color: colorScheme.surfaceContainerHighest.withOpacity(0.3),
                 borderRadius: BorderRadius.circular(12.r),
               ),
               child: Column(
@@ -107,8 +110,6 @@ class MateDetailDialog extends StatelessWidget {
     );
   }
 }
-
-
 
 class _DetailRow extends StatelessWidget {
   const _DetailRow({

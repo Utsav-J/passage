@@ -25,7 +25,6 @@ class AppThemes {
     colorScheme: const ColorScheme.dark(
       primary: Colors.tealAccent,
       surface: Colors.black,
-      background: Colors.black,
     ),
     scaffoldBackgroundColor: Colors.black,
     appBarTheme: const AppBarTheme(backgroundColor: Colors.black, elevation: 0),
@@ -39,8 +38,6 @@ class AppThemes {
     colorScheme: const ColorScheme.light(
       primary: Color(0xFF9C6F3D),
       surface: Color(0xFFF2E8D8),
-      background: Color(0xFFF2E8D8),
-      onBackground: Color(0xFF2B2A28),
     ),
     scaffoldBackgroundColor: const Color(0xFFF2E8D8), // warm sepia
     appBarTheme: const AppBarTheme(

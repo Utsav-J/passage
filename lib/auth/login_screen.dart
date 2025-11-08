@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:passage/auth/register_screen.dart';
 import 'package:passage/services/auth_service.dart';
-import 'package:passage/home_screen.dart';
+import 'package:passage/homescreen/home_screen.dart';
 import 'package:passage/theme/app_theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -81,16 +81,16 @@ class _LoginScreenState extends State<LoginScreen> {
                 Text(
                   'Welcome Back',
                   style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                    fontWeight: FontWeight.bold,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 SizedBox(height: 8.h),
                 Text(
                   'Sign in to continue reading',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 SizedBox(height: 48.h),
@@ -163,7 +163,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ? SizedBox(
                           height: 20.h,
                           width: 20.w,
-                          child: const CircularProgressIndicator(strokeWidth: 2),
+                          child: const CircularProgressIndicator(
+                            strokeWidth: 2,
+                          ),
                         )
                       : Text(
                           'Sign In',
@@ -201,4 +203,3 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
-

@@ -8,6 +8,7 @@ class AvatarPickerDialog extends StatefulWidget {
     required this.currentUser,
     required this.onAvatarSelected,
     required this.initialSeed,
+    super.key,
   });
 
   final User currentUser;
@@ -101,7 +102,9 @@ class _AvatarPickerDialogState extends State<AvatarPickerDialog> {
                   height: 120.w,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Theme.of(context).colorScheme.surfaceVariant,
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
                     border: Border.all(
                       color: Theme.of(
                         context,
@@ -170,7 +173,9 @@ class _AvatarPickerDialogState extends State<AvatarPickerDialog> {
                         height: 80.w,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Theme.of(context).colorScheme.surfaceVariant,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.surfaceContainerHighest,
                           border: Border.all(
                             color: isSelected
                                 ? Theme.of(context).colorScheme.primary

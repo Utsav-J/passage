@@ -1,6 +1,6 @@
 import 'theme/app_theme.dart';
 import 'package:flutter/material.dart';
-import 'package:passage/home_screen.dart';
+import 'package:passage/homescreen/home_screen.dart';
 import 'package:passage/auth/login_screen.dart';
 import 'package:passage/services/api_service.dart';
 import 'package:passage/services/auth_service.dart';

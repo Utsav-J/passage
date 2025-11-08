@@ -186,7 +186,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               decoration: BoxDecoration(
                 color: Theme.of(
                   context,
-                ).colorScheme.surfaceVariant.withOpacity(0.3),
+                ).colorScheme.surfaceContainerHighest.withOpacity(0.3),
                 borderRadius: BorderRadius.circular(12.r),
               ),
               child: Row(
@@ -299,7 +299,7 @@ class _ProfileHeader extends StatelessWidget {
       return CircleAvatar(
         radius: size / 2,
         backgroundImage: NetworkImage(user.profileImageUrl!),
-        backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
       );
     }
 
@@ -311,7 +311,7 @@ class _ProfileHeader extends StatelessWidget {
         width: size,
         height: size,
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceVariant,
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
           shape: BoxShape.circle,
         ),
         child: AvatarPlus(seed, width: size, height: size, trBackground: true),
