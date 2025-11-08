@@ -12,15 +12,14 @@ import 'package:passage/homescreen/my_mates_tab.dart';
 import 'package:passage/reader/epub_reader_page.dart';
 import 'package:passage/theme/app_theme.dart';
 import 'package:passage/models/book.dart';
-import 'package:passage/models/mate.dart';
 import 'package:passage/services/book_service.dart';
 import 'package:passage/services/auth_service.dart';
-import 'package:passage/services/snippet_service.dart';
-import 'package:passage/services/mate_service.dart';
 import 'package:passage/services/epub_metadata_service.dart';
+import 'package:passage/services/google_books_service.dart';
 import 'package:passage/utils/image_utils.dart';
 import 'package:passage/auth/login_screen.dart';
 import '../profile/profile_screen.dart';
+
 const String _defaultAssetPath = 'assets/books/sample.epub';
 
 class HomeScreen extends StatefulWidget {
@@ -42,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final BookService _bookService = BookService();
   final AuthService _authService = AuthService();
   final EpubMetadataService _epubMetadataService = EpubMetadataService();
+  final GoogleBooksService _googleBooksService = GoogleBooksService();
   List<Book> _books = [];
   bool _isLoadingBooks = true;
   String? _errorMessage;
@@ -66,7 +66,8 @@ class _HomeScreenState extends State<HomeScreen> {
       final sampleBookTitle = 'Sample Book';
       final sampleBookAuthor = 'Demo Author';
       var sampleBook = books.firstWhere(
-        (book) => book.title == sampleBookTitle && book.author == sampleBookAuthor,
+        (book) =>
+            book.title == sampleBookTitle && book.author == sampleBookAuthor,
         orElse: () => Book(
           id: -1,
           title: sampleBookTitle,
@@ -87,12 +88,35 @@ class _HomeScreenState extends State<HomeScreen> {
             isAsset: true,
           );
 
-          // Determine cover image
+          // Try to get cover image from Google Books API
           String? coverImageUrl;
-          if (metadata.coverImageBytes != null && metadata.coverImageBytes!.isNotEmpty) {
-            coverImageUrl = ImageUtils.bytesToBase64DataUrlAuto(metadata.coverImageBytes!);
-          } else if (metadata.firstPageImageBytes != null && metadata.firstPageImageBytes!.isNotEmpty) {
-            coverImageUrl = ImageUtils.bytesToBase64DataUrlAuto(metadata.firstPageImageBytes!);
+          try {
+            final googleBook = await _googleBooksService.searchBook(
+              title: metadata.title,
+              author: metadata.author != 'Unknown Author' ? metadata.author : null,
+            );
+
+            if (googleBook?.thumbnail != null) {
+              // Use Google Books thumbnail URL
+              coverImageUrl = googleBook!.thumbnail;
+            }
+          } catch (e) {
+            // Google Books API search failed, continue with EPUB cover extraction
+          }
+
+          // Fallback to EPUB cover image if Google Books didn't provide one
+          if (coverImageUrl == null || coverImageUrl.isEmpty) {
+            if (metadata.coverImageBytes != null &&
+                metadata.coverImageBytes!.isNotEmpty) {
+              coverImageUrl = ImageUtils.bytesToBase64DataUrlAuto(
+                metadata.coverImageBytes!,
+              );
+            } else if (metadata.firstPageImageBytes != null &&
+                metadata.firstPageImageBytes!.isNotEmpty) {
+              coverImageUrl = ImageUtils.bytesToBase64DataUrlAuto(
+                metadata.firstPageImageBytes!,
+              );
+            }
           }
 
           // Add sample book with extracted metadata
@@ -134,8 +158,6 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         }
       } else {
-        // Note: If sample book has default metadata, we could extract and update it
-        // For now, we'll use the existing book since we don't have an update endpoint
         // TODO: Add book update endpoint if metadata update is needed
 
         setState(() {
@@ -192,7 +214,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: _buildFloatingActionButton(),
+      floatingActionButton: _currentIndex == 0
+          ? _buildFloatingActionButton()
+          : null,
     );
   }
 
@@ -255,19 +279,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFloatingActionButton() {
-    switch (_currentIndex) {
-      case 0:
-        return FloatingActionButton(
-          onPressed: _showAddBookDialog,
-          child: const Icon(Icons.add),
-        );
-      case 1:
-      default:
-        return FloatingActionButton(
-          onPressed: _showShareSnippetDialog,
-          child: const Icon(Icons.send),
-        );
-    }
+    return FloatingActionButton(
+      onPressed: _showAddBookDialog,
+      child: const Icon(Icons.add),
+    );
   }
 
   PopupMenuButton<AppThemeMode> _buildThemeMenu() {
@@ -305,38 +320,32 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _openBook(Book book) async {
     // Check if this book has a stored file path
     final filePath = await _getBookFilePath(book.id);
-    
+
     // Determine if this is the sample book (always use asset path)
-    final isSampleBook = book.title == 'Sample Book' && book.author == 'Demo Author';
-    
+    final isSampleBook =
+        book.title == 'Sample Book' && book.author == 'Demo Author';
+
     if (isSampleBook) {
       // Sample book always uses asset path
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => EpubReaderPage(
-            assetPath: _defaultAssetPath,
-            book: book,
-          ),
+          builder: (_) =>
+              EpubReaderPage(assetPath: _defaultAssetPath, book: book),
         ),
       );
     } else if (filePath != null && await File(filePath).exists()) {
       // Book has a stored file path, use it
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => EpubReaderPage(
-            filePath: filePath,
-            book: book,
-          ),
+          builder: (_) => EpubReaderPage(filePath: filePath, book: book),
         ),
       );
     } else {
       // Fallback to asset path (should not happen for user-added books)
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => EpubReaderPage(
-            assetPath: _defaultAssetPath,
-            book: book,
-          ),
+          builder: (_) =>
+              EpubReaderPage(assetPath: _defaultAssetPath, book: book),
         ),
       );
     }
@@ -372,25 +381,46 @@ class _HomeScreenState extends State<HomeScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
+      builder: (context) => const Center(child: CircularProgressIndicator()),
     );
 
     try {
       // Extract metadata from EPUB
       final metadata = await _epubMetadataService.extractMetadata(filePath);
 
+      // Try to get cover image from Google Books API
+      String? coverImageUrl;
+      try {
+        final googleBook = await _googleBooksService.searchBook(
+          title: metadata.title,
+          author: metadata.author != 'Unknown Author' ? metadata.author : null,
+        );
+
+        if (googleBook?.thumbnail != null) {
+          // Use Google Books thumbnail URL
+          coverImageUrl = googleBook!.thumbnail;
+        }
+      } catch (e) {
+        // Google Books API search failed, continue with EPUB cover extraction
+      }
+
+      // Fallback to EPUB cover image if Google Books didn't provide one
+      if (coverImageUrl == null || coverImageUrl.isEmpty) {
+        if (metadata.coverImageBytes != null &&
+            metadata.coverImageBytes!.isNotEmpty) {
+          coverImageUrl = ImageUtils.bytesToBase64DataUrlAuto(
+            metadata.coverImageBytes!,
+          );
+        } else if (metadata.firstPageImageBytes != null &&
+            metadata.firstPageImageBytes!.isNotEmpty) {
+          coverImageUrl = ImageUtils.bytesToBase64DataUrlAuto(
+            metadata.firstPageImageBytes!,
+          );
+        }
+      }
+
       if (!mounted) return;
       Navigator.of(context).pop(); // Close loading dialog
-
-      // Determine cover image
-      String? coverImageUrl;
-      if (metadata.coverImageBytes != null && metadata.coverImageBytes!.isNotEmpty) {
-        coverImageUrl = ImageUtils.bytesToBase64DataUrlAuto(metadata.coverImageBytes!);
-      } else if (metadata.firstPageImageBytes != null && metadata.firstPageImageBytes!.isNotEmpty) {
-        coverImageUrl = ImageUtils.bytesToBase64DataUrlAuto(metadata.firstPageImageBytes!);
-      }
 
       // Show preview dialog
       final confirmResult = await showDialog<bool>(
@@ -414,13 +444,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: ImageUtils.isBase64DataUrl(coverImageUrl)
                         ? Builder(
                             builder: (context) {
-                              final imageBytes = _decodeBase64Image(coverImageUrl);
+                              final imageBytes = _decodeBase64Image(
+                                coverImageUrl,
+                              );
                               if (imageBytes != null) {
                                 return Image.memory(
                                   imageBytes,
                                   fit: BoxFit.contain,
                                   errorBuilder: (context, error, stackTrace) {
-                                    return const Center(child: Icon(Icons.error));
+                                    return const Center(
+                                      child: Icon(Icons.error),
+                                    );
                                   },
                                 );
                               }
@@ -467,12 +501,12 @@ class _HomeScreenState extends State<HomeScreen> {
           author: metadata.author,
           coverImageUrl: coverImageUrl,
         );
-        
+
         // Store file path locally for this book
         if (addedBook.id > 0) {
           await _storeBookFilePath(addedBook.id, filePath);
         }
-        
+
         if (!mounted) return;
         _loadBooks();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -484,7 +518,9 @@ class _HomeScreenState extends State<HomeScreen> {
       Navigator.of(context).pop(); // Close loading dialog
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error extracting EPUB: ${e.toString().replaceFirst('Exception: ', '')}'),
+          content: Text(
+            'Error extracting EPUB: ${e.toString().replaceFirst('Exception: ', '')}',
+          ),
           backgroundColor: Colors.red,
         ),
       );
@@ -503,8 +539,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _deleteBook(int bookId) async {
     // Find the book to check if it's the sample book
-    final book = _books.firstWhere((b) => b.id == bookId, orElse: () => _books.first);
-    
+    final book = _books.firstWhere(
+      (b) => b.id == bookId,
+      orElse: () => _books.first,
+    );
+
     // Prevent deletion of the sample book
     if (book.title == 'Sample Book' && book.author == 'Demo Author') {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -539,151 +578,5 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (context) => const AddMateDialog(),
     );
-  }
-
-  Future<void> _showShareSnippetDialog() async {
-    final mateService = MateService();
-    final snippetService = SnippetService();
-    final bookService = BookService();
-    List<Mate> mates;
-    List<Book> books;
-
-    try {
-      mates = await mateService.getMates();
-      books = await bookService.getMyBooks();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
-    if (!mounted) return;
-
-    if (mates.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You need to have mates first')),
-      );
-      return;
-    }
-
-    if (books.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('You need to have books first')),
-      );
-      return;
-    }
-
-    final textController = TextEditingController();
-    final noteController = TextEditingController();
-    Mate? selectedMate;
-    Book? selectedBook;
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Share Snippet'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                DropdownButtonFormField<Mate>(
-                  value: selectedMate,
-                  decoration: const InputDecoration(labelText: 'Select Mate'),
-                  items: mates.map((mate) {
-                    return DropdownMenuItem(
-                      value: mate,
-                      child: Text(mate.mate?.username ?? 'Unknown'),
-                    );
-                  }).toList(),
-                  onChanged: (value) => setState(() => selectedMate = value),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<Book>(
-                  value: selectedBook,
-                  decoration: const InputDecoration(labelText: 'Select Book'),
-                  items: books.map((book) {
-                    return DropdownMenuItem(
-                      value: book,
-                      child: Text(book.title),
-                    );
-                  }).toList(),
-                  onChanged: (value) => setState(() => selectedBook = value),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: textController,
-                  decoration: const InputDecoration(
-                    labelText: 'Snippet Text',
-                    hintText: 'Enter the text you want to share',
-                  ),
-                  maxLines: 4,
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: noteController,
-                  decoration: const InputDecoration(
-                    labelText: 'Note (Optional)',
-                    hintText: 'Add a note',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (selectedMate != null &&
-                    selectedBook != null &&
-                    textController.text.trim().isNotEmpty) {
-                  Navigator.of(context).pop(true);
-                }
-              },
-              child: const Text('Send'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (result == true &&
-        selectedMate != null &&
-        selectedBook != null &&
-        textController.text.trim().isNotEmpty) {
-      try {
-        await snippetService.sendSnippet(
-          mateId: selectedMate!.mateId,
-          bookId: selectedBook!.id,
-          text: textController.text.trim(),
-          note: noteController.text.trim().isEmpty
-              ? null
-              : noteController.text.trim(),
-        );
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Snippet sent successfully')),
-        );
-      } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceFirst('Exception: ', '')),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-
-    textController.dispose();
-    noteController.dispose();
   }
 }

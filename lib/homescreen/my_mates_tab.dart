@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:passage/homescreen/mate_card.dart';
 import 'package:passage/homescreen/mate_requests_dialog.dart';
 import 'package:passage/homescreen/message_card.dart';
 import 'package:passage/homescreen/requests_button.dart';
@@ -8,7 +9,6 @@ import 'package:passage/models/snippet.dart';
 import 'package:passage/homescreen/section_header.dart';
 import 'package:passage/services/mate_service.dart';
 import 'package:passage/services/snippet_service.dart';
-import 'package:passage/profile/mate_avatar.dart';
 import 'package:passage/profile/mate_detail_dialog.dart';
 
 class MyMatesTab extends StatefulWidget {
@@ -113,6 +113,53 @@ class MyMatesTabState extends State<MyMatesTab> {
     );
   }
 
+  /// Builds an adaptive mates list that adjusts to content height dynamically
+  /// Uses LayoutBuilder to get constraints and SingleChildScrollView with Row
+  /// for responsive sizing across different screen sizes
+  Widget _buildAdaptiveMatesList() {
+    if (_mates.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // Use LayoutBuilder to get available constraints and calculate responsive height
+    // MateCard structure: Avatar (60.w) + spacing (8.h) + text (~20.h)
+    // Since w and h scale with screen size, we calculate dynamically
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Calculate height based on content structure
+        // Avatar size (60.w) + spacing (8.h) + text line height (~24.h with font scaling)
+        // Add some padding for safety
+        final avatarHeight = 60.w; // Avatar diameter
+        final spacing = 8.h; // Spacing between avatar and text
+        final textHeight = 24.h; // Approximate text height
+        final calculatedHeight = avatarHeight + spacing + textHeight;
+
+        // Use SingleChildScrollView with Row for horizontal scrolling
+        // Constrain height to calculated value but allow Row to size naturally
+        return SizedBox(
+          height: calculatedHeight,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (int index = 0; index < _mates.length; index++) ...[
+                  if (index > 0) SizedBox(width: 16.w),
+                  MateCard(
+                    mate: _mates[index],
+                    onRemove: () =>
+                        _removeMate(_mates[index].mate?.username ?? ''),
+                    onTap: () => _showMateDetailDialog(_mates[index]),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLoading = _isLoadingMates || _isLoadingSnippets;
@@ -167,7 +214,7 @@ class MyMatesTabState extends State<MyMatesTab> {
                         RequestsButton(onPressed: _showMateRequestsDialog),
                       ],
                     ),
-                    SizedBox(height: 20.h),
+                    SizedBox(height: 10.h),
                     // Mates list
                     if (_errorMessageMates != null)
                       Container(
@@ -222,23 +269,7 @@ class MyMatesTabState extends State<MyMatesTab> {
                         ),
                       )
                     else
-                      SizedBox(
-                        height: 120.h,
-                        child: ListView.separated(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _mates.length,
-                          separatorBuilder: (_, __) => SizedBox(width: 16.w),
-                          itemBuilder: (context, index) {
-                            final mate = _mates[index];
-                            return _MateCard(
-                              mate: mate,
-                              onRemove: () =>
-                                  _removeMate(mate.mate?.username ?? ''),
-                              onTap: () => _showMateDetailDialog(mate),
-                            );
-                          },
-                        ),
-                      ),
+                      _buildAdaptiveMatesList(),
                   ],
                 ),
               ),
@@ -325,48 +356,6 @@ class MyMatesTabState extends State<MyMatesTab> {
                 }, childCount: _snippets.length),
               ),
             ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MateCard extends StatelessWidget {
-  const _MateCard({
-    required this.mate,
-    required this.onRemove,
-    required this.onTap,
-  });
-
-  final Mate mate;
-  final VoidCallback onRemove;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final mateUser = mate.mate;
-    final theme = Theme.of(context);
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Circular avatar
-          MateAvatar(mateUser: mateUser, mateId: mate.mateId, size: 60.w),
-          SizedBox(height: 8.h),
-          // Name below avatar
-          Text(
-            mateUser?.username ?? 'User ${mate.mateId}',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: const Color(0xFF2C2C2C), // Dark grey/black
-              fontSize: 13.sp,
-              fontWeight: FontWeight.normal,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-          ),
         ],
       ),
     );

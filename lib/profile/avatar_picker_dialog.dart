@@ -108,7 +108,7 @@ class _AvatarPickerDialogState extends State<AvatarPickerDialog> {
                     border: Border.all(
                       color: Theme.of(
                         context,
-                      ).colorScheme.outline.withOpacity(0.2),
+                      ).colorScheme.outline.withValues(alpha: 0.2),
                       width: 2,
                     ),
                   ),
@@ -181,7 +181,7 @@ class _AvatarPickerDialogState extends State<AvatarPickerDialog> {
                                 ? Theme.of(context).colorScheme.primary
                                 : Theme.of(
                                     context,
-                                  ).colorScheme.outline.withOpacity(0.2),
+                                  ).colorScheme.outline.withValues(alpha: 0.2),
                             width: isSelected ? 3 : 2,
                           ),
                         ),

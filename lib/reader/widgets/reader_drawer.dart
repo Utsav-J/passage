@@ -44,7 +44,9 @@ class ReaderDrawer extends StatelessWidget {
             Container(
               padding: EdgeInsets.all(16.w),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primaryContainer.withValues(alpha: 0.3),
                 border: Border(
                   bottom: BorderSide(
                     color: Theme.of(context).dividerColor,
@@ -60,13 +62,13 @@ class ReaderDrawer extends StatelessWidget {
                     children: [
                       Text(
                         'Reading Progress',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                       Text(
                         progressLabel,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
                               fontWeight: FontWeight.bold,
                               color: Theme.of(context).colorScheme.primary,
                             ),
@@ -79,7 +81,9 @@ class ReaderDrawer extends StatelessWidget {
                     child: LinearProgressIndicator(
                       value: progress,
                       minHeight: 8.h,
-                      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
                       valueColor: AlwaysStoppedAnimation<Color>(
                         Theme.of(context).colorScheme.primary,
                       ),
@@ -114,7 +118,7 @@ class ReaderDrawer extends StatelessWidget {
                       // EpubChapter has href property, not cfi
                       // We need to pass href to the navigation callback
                       final href = dyn.href as String?;
-                      
+
                       if (href != null && href.isNotEmpty) {
                         onChapterTap(href);
                       }
@@ -168,10 +172,9 @@ class ReaderDrawer extends StatelessWidget {
                           'No highlights yet',
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurface
-                                    .withOpacity(0.6),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.6),
                               ),
                         ),
                       ),
@@ -187,12 +190,9 @@ class ReaderDrawer extends StatelessWidget {
                             width: 32.w,
                             height: 32.h,
                             decoration: BoxDecoration(
-                              color: h.color.withOpacity(0.3),
+                              color: h.color.withValues(alpha: 0.3),
                               shape: BoxShape.circle,
-                              border: Border.all(
-                                color: h.color,
-                                width: 2,
-                              ),
+                              border: Border.all(color: h.color, width: 2),
                             ),
                             child: Icon(
                               Icons.highlight_outlined,
@@ -232,4 +232,3 @@ class ReaderDrawer extends StatelessWidget {
     );
   }
 }
-
